@@ -644,7 +644,8 @@ class MainActivity : AppCompatActivity() {
             etStart.text.clear()
             etEnd.text.clear()
             etNote.text.clear()
-            viewDate = input.date
+            // 只有真的把日期改到了别的天才跳过去；否则留在当前看的那天（跨午夜那半段不会被甩到前一天）
+            if (input.date != editingDate) viewDate = input.date
             closeSheet()
             reload()
             suggestions = Suggestions.EMPTY
