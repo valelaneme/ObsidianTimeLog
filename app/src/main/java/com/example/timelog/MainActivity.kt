@@ -127,42 +127,106 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // 翻日期手势：按下位置 + 是否正在跟踪。松开手指时按位移判断，慢速滑也能翻
+    // 跟手翻页：按下位置 + 是否已判定为横向滑动
     private var swipeDownX = 0f
     private var swipeDownY = 0f
-    private var swipeTracking = false
+    private var swipeDecided = false
+    private var swipeHorizontal = false
+    // 自己算帧的滑动任务（不走系统动画，开发者选项关了动画也有效）
+    private var slideTick: Runnable? = null
 
     /**
-     * 左右滑动翻日期：左滑看后一天、右滑看前一天。
-     * 不再要求"甩"的速度，只要横向位移 >= 40dp 且明显比纵向多（1.2 倍）就算滑动，
-     * 这样慢慢划也能翻页；竖着划仍然是 ScrollView 正常滚动。
-     * 录入浮层展开时完全不响应，免得在面板里滑动把页面甩走。
+     * 左右滑动翻日期：手指按住直接拖，页面实时跟手移动；松手划够 40dp 就翻页。
+     * 关键：跟手位移和松手后的补间都是"自己算位置"，不经过 View.animate()——
+     * 开发者选项里关掉"动画程序时长缩放"后，系统属性动画会被掐成 0 毫秒，看着像没动画。
+     * 竖着划仍交给 ScrollView 正常滚动；录入浮层展开时完全不响应。
      */
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        val density = resources.displayMetrics.density
         if (inputSheet.visibility == View.VISIBLE) {
-            swipeTracking = false
-        } else {
-            when (ev.actionMasked) {
-                MotionEvent.ACTION_DOWN -> {
-                    swipeDownX = ev.x
-                    swipeDownY = ev.y
-                    swipeTracking = true
-                }
-                MotionEvent.ACTION_UP -> {
-                    if (swipeTracking) {
-                        val dx = ev.x - swipeDownX
-                        val dy = ev.y - swipeDownY
-                        val minDx = 40f * resources.displayMetrics.density
-                        if (abs(dx) >= minDx && abs(dx) >= abs(dy) * 1.2f) {
-                            shiftDate(if (dx < 0f) 1 else -1)   // 左滑 → 后一天
-                        }
+            swipeDecided = false
+            swipeHorizontal = false
+            return super.dispatchTouchEvent(ev)
+        }
+        when (ev.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                slideTick?.let { contentRoot.removeCallbacks(it) }
+                slideTick = null
+                swipeDownX = ev.x
+                swipeDownY = ev.y
+                swipeDecided = false
+                swipeHorizontal = false
+            }
+            MotionEvent.ACTION_MOVE -> {
+                val dx = ev.x - swipeDownX
+                val dy = ev.y - swipeDownY
+                if (!swipeDecided) {
+                    if (abs(dx) > 6f * density && abs(dx) > abs(dy) * 1.2f) {
+                        swipeHorizontal = true
+                        swipeDecided = true
+                    } else if (abs(dy) > 6f * density) {
+                        swipeDecided = true   // 判定为纵向，交给 ScrollView 正常滚
                     }
-                    swipeTracking = false
                 }
-                MotionEvent.ACTION_CANCEL -> swipeTracking = false
+                if (swipeHorizontal) {
+                    // 跟手：直接设位置（0.9 阻尼），纯手动位移，一定看得见
+                    val x = dx * 0.9f
+                    contentRoot.translationX = x
+                    val w = contentRoot.width.toFloat().coerceAtLeast(1f)
+                    contentRoot.alpha = 1f - 0.35f * (abs(x) / w).coerceIn(0f, 1f)
+                }
+            }
+            MotionEvent.ACTION_UP -> {
+                if (swipeHorizontal) {
+                    val dx = ev.x - swipeDownX
+                    if (abs(dx) >= 40f * density) {
+                        val flipped = shiftDate(if (dx < 0f) 1 else -1)
+                        if (!flipped) slideContentTo(0f, 180L)   // 到今天被拦，弹回
+                    } else {
+                        slideContentTo(0f, 180L)                 // 没划够，弹回
+                    }
+                }
+                swipeDecided = false
+                swipeHorizontal = false
+            }
+            MotionEvent.ACTION_CANCEL -> {
+                if (swipeHorizontal) slideContentTo(0f, 160L)
+                swipeDecided = false
+                swipeHorizontal = false
             }
         }
         return super.dispatchTouchEvent(ev)
+    }
+
+    /**
+     * 自己算帧的"滑到位"动画：用 postOnAnimation 每帧插值设 translationX / alpha，
+     * 不走 View.animate() / ValueAnimator，所以开发者选项关了动画也照样滑。
+     */
+    private fun slideContentTo(targetX: Float, duration: Long) {
+        slideTick?.let { contentRoot.removeCallbacks(it) }
+        val fromX = contentRoot.translationX
+        val fromAlpha = contentRoot.alpha
+        val start = System.currentTimeMillis()
+        val interpolator = android.view.animation.DecelerateInterpolator()
+        val width = contentRoot.width.toFloat().coerceAtLeast(1f)
+        val tick = object : Runnable {
+            override fun run() {
+                val t = ((System.currentTimeMillis() - start).toFloat() / duration).coerceIn(0f, 1f)
+                val p = interpolator.getInterpolation(t)
+                contentRoot.translationX = fromX + (targetX - fromX) * p
+                val restAlpha = 1f - 0.35f * (abs(contentRoot.translationX) / width).coerceIn(0f, 1f)
+                contentRoot.alpha = fromAlpha + (restAlpha - fromAlpha) * p
+                if (t < 1f && contentRoot.isAttachedToWindow) {
+                    contentRoot.postOnAnimation(this)
+                } else {
+                    contentRoot.translationX = targetX
+                    contentRoot.alpha = 1f
+                    slideTick = null
+                }
+            }
+        }
+        slideTick = tick
+        contentRoot.postOnAnimation(tick)
     }
 
     companion object {
@@ -531,14 +595,15 @@ class MainActivity : AppCompatActivity() {
      * 翻一天：-1 前一天，+1 后一天。
      * 到今天为止——未来还没发生，没有可看可录的东西，所以不能往后翻。
      */
-    private fun shiftDate(delta: Int) {
+    private fun shiftDate(delta: Int): Boolean {
         val today = LocalDate.now()
         if (delta > 0 && viewDate >= today) {
             Toast.makeText(this, "今天就是最新的一天了", Toast.LENGTH_SHORT).show()
-            return
+            return false
         }
         pendingSlideDir = if (delta > 0) 1 else -1
         goToDate(viewDate.plusDays(delta.toLong()))
+        return true
     }
 
     /** 切日期的统一入口：改日期、同步录入框、重新读那天的 md。 */
@@ -583,33 +648,24 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * 翻页动画（v1.6.6 换新方案）：新的一页从侧边整屏滑进来 + 淡入。
-     * 不拍照、不叠加任何控件——之前那套"旧页快照"方案在部分手机上画不出来，
-     * 结果看着就像没动画。现在只动 contentRoot 一个容器的 translationX 和 alpha，
-     * 纯 GPU 合成，稳定性最高；幅度是整屏宽、时长 360ms，肉眼一定能看见。
+     * 翻页动画（v1.6.7）：新的一页从侧边整屏滑进来 + 淡入。
+     * 用自己算帧的 slideContentTo，不走系统属性动画——开发者选项关掉动画缩放后照样能看见。
      * dir = 1 表示往后一天（从右边进），-1 表示往前一天（从左边进）。
+     * 注意：点日历/手改日期时没有跟手过程，这里给整屏起点；左右滑时手指已经把页面拖到一侧，
+     * 那种情况透传标记，起点由手势阶段决定。
      */
     private fun animateContentIn() {
         val dir = pendingSlideDir
         pendingSlideDir = 0
         if (dir == 0 || contentRoot.width == 0) return
         contentScroll.scrollTo(0, 0)
-        contentRoot.animate().cancel()
 
-        val distance = contentRoot.width.toFloat()
-        contentRoot.translationX = dir * distance
-        contentRoot.alpha = 0.25f
-        contentRoot.animate()
-            .translationX(0f)
-            .alpha(1f)
-            .setDuration(360L)
-            .setInterpolator(android.view.animation.DecelerateInterpolator())
-            .withEndAction {
-                // 兜底复位：万一动画被打断，确保不会停在半透明/偏移状态
-                contentRoot.translationX = 0f
-                contentRoot.alpha = 1f
-            }
-            .start()
+        // 手指跟手拖动时已经把 contentRoot 挪到了一侧（translationX 非 0），
+        // 这时不重设起点，直接从当前位置滑回 0，衔接才顺；否则（日历选日期）给整屏起点。
+        if (abs(contentRoot.translationX) < 1f) {
+            contentRoot.translationX = dir * contentRoot.width.toFloat()
+        }
+        slideContentTo(0f, 280L)
     }
 
     /** 手改日期后点"查看"：让首页统计跟着输入的日期走，避免看的是 A 天、存的是 B 天。 */
