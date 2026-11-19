@@ -3,6 +3,7 @@ package com.example.timelog
 import android.Manifest
 import android.app.Activity
 import android.app.AlarmManager
+import android.app.DatePickerDialog
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
@@ -68,6 +69,8 @@ class MainActivity : AppCompatActivity() {
     private var firstResume = true
     // 上次真正读取的时刻，避免同一瞬间重复读两遍
     private var lastReloadAt = 0L
+    // 翻日期的方向：+1 看后一天（内容从右侧滑进来），-1 看前一天。0 = 不做动画
+    private var pendingSlideDir = 0
 
     // 正在编辑的那条记录（点记录行进来时非 null）；null = 新录入
     private var editing: LogEntry? = null
@@ -84,6 +87,8 @@ class MainActivity : AppCompatActivity() {
     // 视图
     private lateinit var tvFolder: TextView
     private lateinit var tvStatsDate: TextView
+    private lateinit var contentRoot: LinearLayout
+    private lateinit var contentScroll: android.widget.ScrollView
     private lateinit var tvStatRecord: TextView
     private lateinit var tvStatUnrecorded: TextView
     private lateinit var tvStatCoverage: TextView
@@ -235,6 +240,8 @@ class MainActivity : AppCompatActivity() {
     private fun bindViews() {
         tvFolder = findViewById(R.id.tvFolder)
         tvStatsDate = findViewById(R.id.tvStatsDate)
+        contentRoot = findViewById(R.id.contentRoot)
+        contentScroll = findViewById(R.id.contentScroll)
         tvStatRecord = findViewById(R.id.tvStatRecord)
         tvStatUnrecorded = findViewById(R.id.tvStatUnrecorded)
         tvStatCoverage = findViewById(R.id.tvStatCoverage)
@@ -269,12 +276,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupListeners() {
-        findViewById<Button>(R.id.btnSettings).setOnClickListener {
+        // 顶栏：只有日期（点它选日期）和一个齿轮图标
+        findViewById<View>(R.id.btnSettings).setOnClickListener {
             @Suppress("DEPRECATION")
             startActivityForResult(Intent(this, SettingsActivity::class.java), REQ_SETTINGS)
         }
-        findViewById<Button>(R.id.btnPrevDay).setOnClickListener { shiftDate(-1) }
-        findViewById<Button>(R.id.btnNextDay).setOnClickListener { shiftDate(1) }
+        tvStatsDate.setOnClickListener { showDatePicker() }
 
         // 底部三按钮
         btnStopwatch.setOnClickListener { onStopwatchClick() }
@@ -458,7 +465,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun refreshFolderLabel() {
         val name = repo.root()?.name
-        tvFolder.text = if (name == null) "未选择文件夹 · 点右侧「设置」选择" else "当前文件夹：$name"
+        tvFolder.text = if (name == null) "未选择文件夹 · 点右上角齿轮选择" else "当前文件夹：$name"
     }
 
     /**
@@ -480,14 +487,74 @@ class MainActivity : AppCompatActivity() {
                 renderStats()
                 renderRecords()
                 renderCheck(emptyList())
+                animateContentIn()
             }
         }.start()
     }
 
+    /**
+     * 翻一天：-1 前一天，+1 后一天。
+     * 到今天为止——未来还没发生，没有可看可录的东西，所以不能往后翻。
+     */
     private fun shiftDate(delta: Int) {
-        viewDate = viewDate.plusDays(delta.toLong())
-        etDate.setText(viewDate.toString())
+        val today = LocalDate.now()
+        if (delta > 0 && viewDate >= today) {
+            Toast.makeText(this, "今天就是最新的一天了", Toast.LENGTH_SHORT).show()
+            return
+        }
+        pendingSlideDir = if (delta > 0) 1 else -1
+        goToDate(viewDate.plusDays(delta.toLong()))
+    }
+
+    /** 切日期的统一入口：改日期、同步录入框里的日期、重新读那天的 md。 */
+    private fun goToDate(target: LocalDate) {
+        viewDate = target
+        etDate.setText(target.toString())
         reload()
+    }
+
+    /**
+     * 点顶栏日期：弹系统日期选择器，默认停在正在看的那天，显示当月。
+     * maxDate 设成现在，未来的日子直接灰掉点不了。
+     */
+    private fun showDatePicker() {
+        val picker = DatePickerDialog(
+            this,
+            { _, year, month, day ->
+                val picked = LocalDate.of(year, month + 1, day)
+                if (picked.isAfter(LocalDate.now())) {
+                    Toast.makeText(this, "还没到那一天", Toast.LENGTH_SHORT).show()
+                } else {
+                    pendingSlideDir = if (picked.isAfter(viewDate)) 1 else -1
+                    goToDate(picked)
+                }
+            },
+            viewDate.year,
+            viewDate.monthValue - 1,
+            viewDate.dayOfMonth
+        )
+        picker.datePicker.maxDate = System.currentTimeMillis()
+        picker.show()
+    }
+
+    /**
+     * 极简过渡动画：内容容器从翻动方向的 24dp 处滑回原位，同时淡入，160ms 结束。
+     * 只动一个 View 的 translationX / alpha，交给 GPU 合成，基本不耗性能。
+     */
+    private fun animateContentIn() {
+        val dir = pendingSlideDir
+        pendingSlideDir = 0
+        if (dir == 0 || contentRoot.width == 0) return
+        contentScroll.scrollTo(0, 0)
+        contentRoot.animate().cancel()
+        contentRoot.translationX = dp(24) * dir.toFloat()
+        contentRoot.alpha = 0.55f
+        contentRoot.animate()
+            .translationX(0f)
+            .alpha(1f)
+            .setDuration(160L)
+            .setInterpolator(android.view.animation.DecelerateInterpolator())
+            .start()
     }
 
     /** 手改日期后点"查看"：让首页统计跟着输入的日期走，避免看的是 A 天、存的是 B 天。 */
@@ -501,10 +568,12 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "日期请写成 2026-11-19 这种格式", Toast.LENGTH_SHORT).show()
             return
         }
-        viewDate = date
-        etDate.setText(date.toString())
-        reload()
-        Toast.makeText(this, "已切到 $date", Toast.LENGTH_SHORT).show()
+        if (date.isAfter(LocalDate.now())) {
+            Toast.makeText(this, "还没到那一天", Toast.LENGTH_SHORT).show()
+            return
+        }
+        pendingSlideDir = if (date.isAfter(viewDate)) 1 else -1
+        goToDate(date)
     }
 
     // ---------- 快捷时间 ----------
@@ -927,7 +996,7 @@ class MainActivity : AppCompatActivity() {
         val summary: DaySummary = Analyzer.analyzeDay(entries, viewDate)
         val covered = Analyzer.coveredMinutes(day)
         val unrecorded = (1440 - covered).coerceAtLeast(0)
-        tvStatsDate.text = "录入日期：$viewDate"
+        tvStatsDate.text = "录入日期：$viewDate ▾"
 
         // 四项统计排成一行
         tvStatRecord.text = Formatters.duration(covered)
@@ -975,7 +1044,7 @@ class MainActivity : AppCompatActivity() {
         val rowHeight = rowHeightPx()
 
         if (repo.root() == null) {
-            recordsContainer.addView(hintView("还没选择日记文件夹，请点右上角「设置」选择。"))
+            recordsContainer.addView(hintView("还没选择日记文件夹，请点右上角齿轮选择。"))
             return
         }
         val day = entries.filter { it.date == viewDate }

@@ -10,67 +10,67 @@
         android:orientation="vertical"
         android:padding="12dp">
 
-        <!-- 顶部：当前文件夹 + 设置入口。选文件夹与刷新都收进设置页 -->
+        <!-- 顶栏一行：左边「录入日期」（点它弹日期选择器）+ 文件夹小字，右边只有一个齿轮图标 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
-            <TextView
-                android:id="@+id/tvFolder"
+            <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:paddingTop="4dp"
-                android:paddingBottom="4dp"
-                android:text="未选择文件夹"
-                android:textSize="12sp" />
+                android:orientation="vertical">
 
-            <Button
+                <TextView
+                    android:id="@+id/tvStatsDate"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="?attr/selectableItemBackground"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:paddingTop="4dp"
+                    android:paddingEnd="8dp"
+                    android:paddingBottom="2dp"
+                    android:text="录入日期：—"
+                    android:textSize="17sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvFolder"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:text="未选择文件夹"
+                    android:textColor="#9AA0A6"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+            <ImageButton
                 android:id="@+id/btnSettings"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="⚙ 设置" />
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="设置"
+                android:padding="10dp"
+                android:src="@drawable/ic_settings" />
         </LinearLayout>
 
         <ScrollView
+            android:id="@+id/contentScroll"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
             android:fillViewport="true">
 
+            <!-- 内容根：翻日期时整体做一个小幅位移动画（只动这一个容器，开销很小） -->
             <LinearLayout
+                android:id="@+id/contentRoot"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal">
-
-                    <Button
-                        android:id="@+id/btnPrevDay"
-                        android:layout_width="48dp"
-                        android:layout_height="wrap_content"
-                        android:text="‹" />
-
-                    <TextView
-                        android:id="@+id/tvStatsDate"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:gravity="center"
-                        android:textSize="17sp"
-                        android:textStyle="bold" />
-
-                    <Button
-                        android:id="@+id/btnNextDay"
-                        android:layout_width="48dp"
-                        android:layout_height="wrap_content"
-                        android:text="›" />
-                </LinearLayout>
 
                 <!-- 24 小时时间轴：颜色=一级分类，红条=重叠，灰底=空白，蓝线=现在 -->
                 <!-- 色带本身只有 20dp 高（原来 40dp 的一半），刻度数字在它下方 -->
