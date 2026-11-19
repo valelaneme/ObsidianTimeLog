@@ -71,11 +71,12 @@ TimerReceiver.kt  倒计时到点的系统闹钟接收器，弹通知
 ## 怎么打包安装（本机没有 Android Studio，用 GitHub 云端编译）
 
 1. 把代码传到 GitHub（网页版新建仓库 → upload files → 拖进去 → Commit changes）。
+   - ⚠️ `.github` 是隐藏文件夹，Windows 拖拽容易漏传。漏了它 Actions 就不会自动跑；此时可点 **Actions** 页手动 **Run workflow** 也能编译（前提该 workflow 已在仓库里）。
 2. 点 **Actions** → 左侧 **Build APK** → **Run workflow** → 点绿色按钮。
 3. 跑完点进这次运行 → 最下方 **Artifacts** → 下载 **TimeLog-APK**（zip）→ 解压得到 `app-debug.apk`。
 4. APK 传到手机安装（允许"安装未知来源应用"）。首次打开选一次日记文件夹授权 + 通知权限。
 
-每次云端编译版本号自动 +1。APK 用默认调试签名可直接装；换正式签名需配 GitHub Secrets（以后需要再加）。最低 Android 8.0（API 26）。
+**版本号**：`app/build.gradle` 用编译时刻自动生成版本号（`versionCode` = 分钟级时间戳，`versionName` = `1.0.年月日.时分`，如 `1.0.20261119.1324`）。不依赖任何 CI 环境变量，也不依赖隐藏文件夹里的 workflow——**每次云端编译版本号必然变化**，覆盖安装不会被系统当成同一版本而"装了没反应"。APK 用默认调试签名可直接装；换正式签名需配 GitHub Secrets（以后需要再加）。最低 Android 8.0（API 26）。
 
 ## 已知限制与风险
 
