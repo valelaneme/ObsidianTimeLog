@@ -87,10 +87,12 @@ TimerReceiver.kt  倒计时到点的系统闹钟接收器，弹通知
 1. 把代码传到 GitHub（网页版新建仓库 → upload files → 拖进去 → Commit changes）。
    - ⚠️ `.github` 是隐藏文件夹，Windows 拖拽容易漏传。漏了它 Actions 就不会自动跑；此时可点 **Actions** 页手动 **Run workflow** 也能编译（前提该 workflow 已在仓库里）。
 2. 点 **Actions** → 左侧 **Build APK** → **Run workflow** → 点绿色按钮。
-3. 跑完点进这次运行 → 最下方 **Artifacts** → 下载 **TimeLog-APK**（zip）→ 解压得到 `app-debug.apk`。
+3. 跑完有两种拿包方式：
+   - **推荐：Releases 直下 .apk**（不用解压）→ 回仓库首页，右侧 **Releases**（或直接打开 `/releases/latest`）→ 点开最新一条 → 在 **Assets** 里点 `Timelog-1.0.yyyyMMdd.HHmm.apk` 即直接下载 APK 文件。文件已按版本号命名，下载下来就是 `.apk`。
+   - 或用 **Artifacts**：点进这次运行 → 最下方 **Artifacts** → 下载 **TimeLog-APK**。注意 GitHub 的 Artifacts **一定是 zip**（平台机制，无法改成直接给 apk），解压后得到 `Timelog-1.0.yyyyMMdd.HHmm.apk`。
 4. APK 传到手机安装（允许"安装未知来源应用"）。首次打开选一次日记文件夹授权 + 通知权限。
 
-**版本号**：`app/build.gradle` 用编译时刻自动生成版本号（`versionCode` = 分钟级时间戳，`versionName` = `1.0.年月日.时分`，如 `1.0.20261119.1324`）。不依赖任何 CI 环境变量，也不依赖隐藏文件夹里的 workflow——**每次云端编译版本号必然变化**，覆盖安装不会被系统当成同一版本而"装了没反应"。最低 Android 8.0（API 26）。
+**版本号**：`app/build.gradle` 用编译时刻自动生成版本号（`versionCode` = 分钟级时间戳，`versionName` = `1.0.年月日.时分`，如 `1.0.20261119.1324`）。不依赖任何 CI 环境变量，也不依赖隐藏文件夹里的 workflow——**每次云端编译版本号必然变化**，覆盖安装不会被系统当成同一版本而"装了没反应"。编译完 Gradle 会把这次的真实版本号写到 `app/build/timelog-versionName.txt`，workflow 据此把 APK 改名为 `Timelog-1.0.yyyyMMdd.HHmm.apk`，所以**文件名里的版本号和手机「应用信息」里显示的始终一致**。最低 Android 8.0（API 26）。
 
 ## 正式签名（已接好）
 
@@ -112,7 +114,7 @@ GitHub 仓库 → Settings → Secrets and variables → Actions 里已存这 4 
 >
 > 卸载前不用备份数据——你的日志是 Obsidian 里的 md 文件，不在 App 里；重装后重新选一次日记文件夹授权即可。
 
-产物路径和 Artifact 名字都保持原样（`TimeLog-APK` → `app-debug.apk`），下载方式不变。构建类型仍是 debug；以后要出正式发布版，把 workflow 里 `assembleDebug` 改成 `assembleRelease`、上传路径改成 `.../apk/release/app-release.apk` 即可，签名配置不用再动。
+产物命名：APK 编译后改名为 `Timelog-1.0.yyyyMMdd.HHmm.apk`，同时上传 Artifact（`TimeLog-APK`，GitHub 会包成 zip）和发布 Release（原始 .apk 直链，不用解压）。构建类型仍是 debug；以后要出正式发布版，把 workflow 里 `assembleDebug` 改成 `assembleRelease`、上传路径改成 `.../apk/release/app-release.apk` 即可，签名配置不用再动。
 
 ## 已知限制与风险
 

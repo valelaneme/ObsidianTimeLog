@@ -5,6 +5,10 @@ on:
   push:
     branches: [main, master]
 
+# 发布 Release 需要写权限（GITHUB_TOKEN 默认可能只有读权限）
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -85,9 +89,49 @@ jobs:
           "$APKSIGNER" verify app/build/outputs/apk/debug/app-debug.apk
           echo "APK 签名校验通过"
 
+      # 把 APK 改名为 Timelog-1.0.yyyyMMdd.HHmm.apk
+      # 版本号读 Gradle 落盘的文件，保证和 App 内「关于/应用信息」显示的一致。
+      - name: Rename APK with version
+        id: apk
+        shell: bash
+        run: |
+          SRC=app/build/outputs/apk/debug/app-debug.apk
+          VER_FILE=app/build/timelog-versionName.txt
+          if [ -f "$VER_FILE" ]; then
+            VER=$(tr -d '[:space:]' < "$VER_FILE")
+          else
+            VER="1.0.$(date -u -d '+8 hours' +%Y%m%d.%H%M)"
+            echo "::warning::未找到版本号文件，按当前时刻估算为 $VER"
+          fi
+          DEST="app/build/outputs/apk/debug/Timelog-${VER}.apk"
+          mv "$SRC" "$DEST"
+          echo "ver=$VER" >> "$GITHUB_OUTPUT"
+          echo "apk=$DEST" >> "$GITHUB_OUTPUT"
+          echo "APK 文件名：Timelog-${VER}.apk"
+
+      # Artifacts 下载时一定会被 GitHub 打包成 zip（平台机制，改不了），
+      # 所以同时发一个 Release：里面的 .apk 是原始文件，点一下直接下载，不用解压。
+      - name: Publish direct APK to Release
+        shell: bash
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APK: ${{ steps.apk.outputs.apk }}
+          VER: ${{ steps.apk.outputs.ver }}
+        run: |
+          TAG="v${VER}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$APK" --clobber
+          else
+            gh release create "$TAG" "$APK" \
+              --title "TimeLog ${VER}" \
+              --notes "自动构建 ${VER}（提交 ${GITHUB_SHA:0:7}，第 ${GITHUB_RUN_NUMBER} 次运行）"
+          fi
+          echo "直链：https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/$(basename "$APK")"
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: TimeLog-APK
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: Timelog-${{ steps.apk.outputs.ver }}-zip
+          path: ${{ steps.apk.outputs.apk }}
           if-no-files-found: error

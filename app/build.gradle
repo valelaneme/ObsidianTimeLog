@@ -11,6 +11,13 @@ def sdf = new java.text.SimpleDateFormat('yyyyMMdd.HHmm')
 sdf.setTimeZone(TimeZone.getTimeZone('Asia/Shanghai'))
 def ciBuildName = sdf.format(new Date(buildStamp))
 
+// 把这次的版本号落盘，供 workflow 给 APK 改文件名用。
+// 关键：文件名必须用 Gradle 真实算出的版本号，不能在 shell 里按时间另算一次，
+// 否则编译耗时跨分钟时，文件名会和 App 里显示的版本号对不上。
+def versionOut = new File(project.buildDir, 'timelog-versionName.txt')
+versionOut.parentFile.mkdirs()
+versionOut.text = "1.0.${ciBuildName}\n"
+
 // ---- 正式签名 ----
 // GitHub 仓库里已存 4 个 Secrets：KEYSTORE_BASE64 / KEYSTORE_PASSWORD / KEY_ALIAS / KEY_PASSWORD。
 // workflow 会把 BASE64 解码成临时 keystore 文件，并把 4 个值作为环境变量传进来。
