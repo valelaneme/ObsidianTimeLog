@@ -10,53 +10,37 @@
         android:orientation="vertical"
         android:padding="12dp">
 
-        <!-- 顶栏一行：左边「录入日期」（点它弹日期选择器）+ 文件夹小字，右边只有一个齿轮图标 -->
-        <LinearLayout
+        <!-- 顶栏：日期居中（点它弹日期选择器），右上角只有一个齿轮图标 -->
+        <FrameLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
+            android:layout_height="wrap_content">
 
-            <LinearLayout
-                android:layout_width="0dp"
+            <TextView
+                android:id="@+id/tvStatsDate"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:orientation="vertical">
-
-                <TextView
-                    android:id="@+id/tvStatsDate"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:background="?attr/selectableItemBackground"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:paddingTop="4dp"
-                    android:paddingEnd="8dp"
-                    android:paddingBottom="2dp"
-                    android:text="录入日期：—"
-                    android:textSize="17sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:id="@+id/tvFolder"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:ellipsize="end"
-                    android:maxLines="1"
-                    android:text="未选择文件夹"
-                    android:textColor="#9AA0A6"
-                    android:textSize="11sp" />
-            </LinearLayout>
+                android:layout_gravity="center"
+                android:background="?attr/selectableItemBackground"
+                android:clickable="true"
+                android:focusable="true"
+                android:paddingStart="8dp"
+                android:paddingTop="6dp"
+                android:paddingEnd="8dp"
+                android:paddingBottom="6dp"
+                android:text="录入日期：—"
+                android:textSize="17sp"
+                android:textStyle="bold" />
 
             <ImageButton
                 android:id="@+id/btnSettings"
                 android:layout_width="44dp"
                 android:layout_height="44dp"
+                android:layout_gravity="end|center_vertical"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="设置"
                 android:padding="10dp"
                 android:src="@drawable/ic_settings" />
-        </LinearLayout>
+        </FrameLayout>
 
         <ScrollView
             android:id="@+id/contentScroll"
@@ -73,12 +57,12 @@
                 android:orientation="vertical">
 
                 <!-- 24 小时时间轴：颜色=一级分类，红条=重叠，灰底=空白，蓝线=现在 -->
-                <!-- 色带本身只有 20dp 高（原来 40dp 的一半），刻度数字在它下方 -->
+                <!-- 色带本身 20dp 高，刻度改成黑线直接画在色带上，不再占下方空间 -->
                 <com.example.timelog.ui.TimelineView
                     android:id="@+id/timeline"
                     android:layout_width="match_parent"
-                    android:layout_height="36dp"
-                    android:layout_marginTop="4dp"
+                    android:layout_height="26dp"
+                    android:layout_marginTop="6dp"
                     android:contentDescription="当天时间轴" />
 
                 <TextView
@@ -86,7 +70,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:paddingBottom="2dp"
-                    android:text="颜色＝一级分类　红条＝重叠　灰底＝未记录　蓝线＝现在"
+                    android:text="颜色＝一级分类　红条＝重叠　灰底＝未记录　蓝线＝现在　黑线＝3/6/9…点"
                     android:textSize="11sp" />
 
                 <!-- 四项统计排成一行：记录时间 / 未记录 / 覆盖率 / 条数 -->

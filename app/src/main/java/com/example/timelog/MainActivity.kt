@@ -85,7 +85,6 @@ class MainActivity : AppCompatActivity() {
     private var suggestionsLoading = false
 
     // 视图
-    private lateinit var tvFolder: TextView
     private lateinit var tvStatsDate: TextView
     private lateinit var contentRoot: LinearLayout
     private lateinit var contentScroll: android.widget.ScrollView
@@ -195,7 +194,6 @@ class MainActivity : AppCompatActivity() {
         if (prefs.countdownEnd > 0L && prefs.countdownEnd <= System.currentTimeMillis()) {
             prefs.countdownEnd = 0L
         }
-        refreshFolderLabel()
         updatePreview()
         reload()
         loadSuggestionsIfNeeded()
@@ -213,7 +211,6 @@ class MainActivity : AppCompatActivity() {
         if (folderChanged) {
             lastTreeUri = now
             suggestions = Suggestions.EMPTY
-            refreshFolderLabel()
             reload()
             loadSuggestionsIfNeeded()
             firstResume = false
@@ -238,7 +235,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun bindViews() {
-        tvFolder = findViewById(R.id.tvFolder)
         tvStatsDate = findViewById(R.id.tvStatsDate)
         contentRoot = findViewById(R.id.contentRoot)
         contentScroll = findViewById(R.id.contentScroll)
@@ -458,14 +454,8 @@ class MainActivity : AppCompatActivity() {
         if (requestCode != REQ_SETTINGS || resultCode != Activity.RESULT_OK) return
         lastTreeUri = repo.treeUri?.toString()
         suggestions = Suggestions.EMPTY
-        refreshFolderLabel()
         reload()
         loadSuggestionsIfNeeded()
-    }
-
-    private fun refreshFolderLabel() {
-        val name = repo.root()?.name
-        tvFolder.text = if (name == null) "未选择文件夹 · 点右上角齿轮选择" else "当前文件夹：$name"
     }
 
     /**
@@ -476,14 +466,12 @@ class MainActivity : AppCompatActivity() {
         val now = System.currentTimeMillis()
         if (!force && now - lastReloadAt < 600) return
         lastReloadAt = now
-        tvFolder.text = "读取中…"
         Thread {
             val result: ParseResult = repo.loadDay(viewDate)
             mainHandler.post {
                 entries = result.entries
                 warnings = result.warnings
                 problems = result.problems
-                refreshFolderLabel()
                 renderStats()
                 renderRecords()
                 renderCheck(emptyList())
