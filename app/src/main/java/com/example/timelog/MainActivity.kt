@@ -36,12 +36,9 @@ import com.example.timelog.data.Prefs
 import com.example.timelog.data.VaultRepository
 import com.example.timelog.core.Suggestions
 import com.example.timelog.ui.TimelineView
-import android.graphics.Bitmap
-import android.graphics.Canvas
 import android.graphics.Color
 import android.view.Gravity
 import android.widget.CheckBox
-import android.widget.ImageView
 import android.widget.LinearLayout
 import java.time.Instant
 import java.time.LocalDate
@@ -89,9 +86,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvStatsDate: TextView
     private lateinit var contentRoot: LinearLayout
     private lateinit var contentScroll: android.widget.ScrollView
-    private lateinit var slideSnapshot: ImageView
-    // 翻日期前拍下的旧页面，渲染完新页面后用来做封面式滑动
-    private var pendingSnapshot: Bitmap? = null
     private lateinit var tvStatRecord: TextView
     private lateinit var tvStatUnrecorded: TextView
     private lateinit var tvStatCoverage: TextView
@@ -244,7 +238,6 @@ class MainActivity : AppCompatActivity() {
         tvStatsDate = findViewById(R.id.tvStatsDate)
         contentRoot = findViewById(R.id.contentRoot)
         contentScroll = findViewById(R.id.contentScroll)
-        slideSnapshot = findViewById(R.id.slideSnapshot)
         tvStatRecord = findViewById(R.id.tvStatRecord)
         tvStatUnrecorded = findViewById(R.id.tvStatUnrecorded)
         tvStatCoverage = findViewById(R.id.tvStatCoverage)
@@ -548,24 +541,12 @@ class MainActivity : AppCompatActivity() {
         goToDate(viewDate.plusDays(delta.toLong()))
     }
 
-    /** 切日期的统一入口：先给旧页面拍张照，再改日期、同步录入框、重新读那天的 md。 */
+    /** 切日期的统一入口：改日期、同步录入框、重新读那天的 md。 */
     private fun goToDate(target: LocalDate) {
         if (target == viewDate) return
-        captureContentSnapshot()
         viewDate = target
         etDate.setText(target.toString())
         reload()
-    }
-
-    /**
-     * 把当前可见的内容区画到一张和屏幕等大的位图上。
-     * 拍照必须在读数之前（UI 线程），读数完成后新页面渲染好了再一起做滑动。
-     */
-    private fun captureContentSnapshot() {
-        if (contentScroll.width <= 0 || contentScroll.height <= 0) return
-        val bmp = Bitmap.createBitmap(contentScroll.width, contentScroll.height, Bitmap.Config.ARGB_8888)
-        contentScroll.draw(Canvas(bmp))
-        pendingSnapshot = bmp
     }
 
     /**
@@ -602,57 +583,33 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * 微信切标签那种整页左右滑：旧页面那张快照往一侧滑出去，新页面从另一侧滑进来，两块一起动。
-     * 只改 translationX（快照到时间再隐藏），位图只在切日期时生成一次，不参与布局计算。
-     * 万一拍照失败（比如视图还没布局好），退回原来的小幅滑入 + 淡入。
+     * 翻页动画（v1.6.6 换新方案）：新的一页从侧边整屏滑进来 + 淡入。
+     * 不拍照、不叠加任何控件——之前那套"旧页快照"方案在部分手机上画不出来，
+     * 结果看着就像没动画。现在只动 contentRoot 一个容器的 translationX 和 alpha，
+     * 纯 GPU 合成，稳定性最高；幅度是整屏宽、时长 360ms，肉眼一定能看见。
+     * dir = 1 表示往后一天（从右边进），-1 表示往前一天（从左边进）。
      */
     private fun animateContentIn() {
         val dir = pendingSlideDir
         pendingSlideDir = 0
-        val snap = pendingSnapshot
-        pendingSnapshot = null
-        if (dir == 0 || contentRoot.width == 0) {
-            if (snap != null) slideSnapshot.visibility = View.GONE
-            return
-        }
+        if (dir == 0 || contentRoot.width == 0) return
         contentScroll.scrollTo(0, 0)
         contentRoot.animate().cancel()
-        slideSnapshot.animate().cancel()
 
-        // 注意：不能用 slideSnapshot.width > 0 当开关——它在动画结束后会被设回 GONE，
-        // GONE 的控件宽度恒为 0，会导致整页滑动分支永远走不到（只走下面的 24dp 兜底）。
-        // 快照能拍到就说明内容区已经布局好了，直接用 snap 是否为空判断即可。
-        if (snap != null) {
-            val distance = contentRoot.width.toFloat()
-            slideSnapshot.setImageBitmap(snap)
-            slideSnapshot.visibility = View.VISIBLE
-            slideSnapshot.translationX = 0f
-            contentRoot.translationX = dir * distance
-            val interpolator = android.view.animation.DecelerateInterpolator()
-            slideSnapshot.animate()
-                .translationX(-dir * distance)
-                .setDuration(260L)
-                .setInterpolator(interpolator)
-                .withEndAction {
-                    slideSnapshot.visibility = View.INVISIBLE
-                    slideSnapshot.setImageBitmap(null)
-                }
-                .start()
-            contentRoot.animate()
-                .translationX(0f)
-                .setDuration(260L)
-                .setInterpolator(interpolator)
-                .start()
-        } else {
-            contentRoot.translationX = dp(24) * dir.toFloat()
-            contentRoot.alpha = 0.55f
-            contentRoot.animate()
-                .translationX(0f)
-                .alpha(1f)
-                .setDuration(160L)
-                .setInterpolator(android.view.animation.DecelerateInterpolator())
-                .start()
-        }
+        val distance = contentRoot.width.toFloat()
+        contentRoot.translationX = dir * distance
+        contentRoot.alpha = 0.25f
+        contentRoot.animate()
+            .translationX(0f)
+            .alpha(1f)
+            .setDuration(360L)
+            .setInterpolator(android.view.animation.DecelerateInterpolator())
+            .withEndAction {
+                // 兜底复位：万一动画被打断，确保不会停在半透明/偏移状态
+                contentRoot.translationX = 0f
+                contentRoot.alpha = 1f
+            }
+            .start()
     }
 
     /** 手改日期后点"查看"：让首页统计跟着输入的日期走，避免看的是 A 天、存的是 B 天。 */

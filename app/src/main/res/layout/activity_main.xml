@@ -242,14 +242,6 @@
                     android:visibility="gone" />
             </LinearLayout>
             </ScrollView>
-
-            <!-- 翻日期时盖住旧页面的那一帧，平时不显示 -->
-            <ImageView
-                android:id="@+id/slideSnapshot"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:scaleType="fitXY"
-                android:visibility="invisible" />
         </FrameLayout>
 
         <!-- 底部三按钮：单手拇指可及 -->
