@@ -3,7 +3,13 @@ plugins {
     id 'org.jetbrains.kotlin.android'
 }
 
-def ciBuildNumber = System.getenv('BUILD_NUMBER')?.toInteger() ?: 1
+// 版本号由编译时刻生成，不依赖 CI 环境变量（workflow 的 .github 隐藏文件夹手动上传易漏）。
+// 每次云端编译都会得到递增的版本号，覆盖安装不会被系统当成同一版本。
+def buildStamp = System.currentTimeMillis()
+def ciBuildNumber = (buildStamp / 60000L) as int       // 分钟级序号，约 2900 万，远低于 Android 上限 21 亿
+def sdf = new java.text.SimpleDateFormat('yyyyMMdd.HHmm')
+sdf.setTimeZone(TimeZone.getTimeZone('Asia/Shanghai'))
+def ciBuildName = sdf.format(new Date(buildStamp))
 
 android {
     namespace 'com.example.timelog'
@@ -14,7 +20,7 @@ android {
         minSdk 26
         targetSdk 34
         versionCode ciBuildNumber
-        versionName "1.0.${ciBuildNumber}"
+        versionName "1.0.${ciBuildName}"
     }
 
     buildTypes {
