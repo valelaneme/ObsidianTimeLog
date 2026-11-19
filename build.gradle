@@ -1,4 +1,39 @@
-plugins {
-    id 'com.android.application' version '8.2.2' apply false
-    id 'org.jetbrains.kotlin.android' version '1.9.22' apply false
+android {
+    // ... 保持你原有的 compileSdk、defaultConfig 等配置不变 ...
+
+    signingConfigs {
+        // 统一使用 release 签名配置（Debug 也可以共用，或者单独写）
+        release {
+            // 1. 避免局部临时变量名与 storeFile/storePassword/keyAlias/keyPassword 重名
+            def envKeystorePath = System.getenv("KEYSTORE_PATH") ?: System.getenv("SIGNING_KEY_STORE_PATH")
+            def envStorePass = System.getenv("KEYSTORE_PASSWORD") ?: System.getenv("SIGNING_STORE_PASSWORD")
+            def envKeyAlias = System.getenv("KEY_ALIAS") ?: System.getenv("SIGNING_KEY_ALIAS")
+            def envKeyPass = System.getenv("KEY_PASSWORD") ?: System.getenv("SIGNING_KEY_PASSWORD")
+
+            if (envKeystorePath && file(envKeystorePath).exists()) {
+                println "TimeLog: 使用正式签名 -> ${envKeystorePath}"
+                // 2. 下面这四行必须明确使用 = 赋值，不能省略等号！
+                storeFile = file(envKeystorePath)
+                storePassword = envStorePass
+                keyAlias = envKeyAlias
+                keyPassword = envKeyPass
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            // 如果你的 workflow 运行的是 assembleDebug，这里需要关联上面的 signingConfig
+            if (signingConfigs.release.storeFile != null) {
+                signingConfig signingConfigs.release
+            }
+        }
+        release {
+            minifyEnabled false
+            if (signingConfigs.release.storeFile != null) {
+                signingConfig signingConfigs.release
+            }
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
 }
