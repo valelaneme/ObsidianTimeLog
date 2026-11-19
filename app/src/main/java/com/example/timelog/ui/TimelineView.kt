@@ -38,7 +38,8 @@ class TimelineView @JvmOverloads constructor(
         color = Color.parseColor("#D93025")
     }
     private val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#5F6368")
+        // 刻度数字放淡一点，只做参照，不抢色带的注意力
+        color = Color.parseColor("#9AA0A6")
         textAlign = Paint.Align.CENTER
     }
     private val nowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -47,7 +48,7 @@ class TimelineView @JvmOverloads constructor(
 
     init {
         val density = resources.displayMetrics.density
-        labelPaint.textSize = 11f * density
+        labelPaint.textSize = 10f * density
         nowPaint.strokeWidth = 2f * density
     }
 
@@ -59,17 +60,14 @@ class TimelineView @JvmOverloads constructor(
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        val pad = 8f * resources.displayMetrics.density
-        val barTop = 30f * resources.displayMetrics.density
-        val barBottom = height - 14f * resources.displayMetrics.density
+        val density = resources.displayMetrics.density
+        val pad = 8f * density
+        // 刻度条：宽度减半（10sp 字 + 4dp 留白），整体挪到色带下方
+        val rulerHeight = labelPaint.textSize + 4f * density
+        val barTop = 2f * density
+        val barBottom = height - rulerHeight
         val barWidth = width - pad * 2f
         if (barBottom <= barTop || barWidth <= 0f) return
-
-        // 刻度：0/3/6/.../24
-        for (hour in 0..24 step 3) {
-            val x = pad + barWidth * (hour / 24f)
-            canvas.drawText(hour.toString(), x, barTop - 8f * resources.displayMetrics.density, labelPaint)
-        }
 
         // 空白时段（底）
         canvas.drawRect(pad, barTop, pad + barWidth, barBottom, trackPaint)
@@ -83,7 +81,7 @@ class TimelineView @JvmOverloads constructor(
         }
 
         // 重叠区间（顶部红条）
-        val stripeBottom = barTop + 6f * resources.displayMetrics.density
+        val stripeBottom = barTop + 6f * density
         Analyzer.overlaps(entries).forEach { o ->
             val start = maxOf(o.first.startMin, o.second.startMin)
             val end = minOf(o.first.endMin, o.second.endMin)
@@ -99,7 +97,17 @@ class TimelineView @JvmOverloads constructor(
             val now = LocalDateTime.now()
             val minute = now.hour * 60 + now.minute
             val x = pad + barWidth * (minute / 1440f)
-            canvas.drawLine(x, barTop - 4f, x, barBottom + 4f, nowPaint)
+            canvas.drawLine(x, barTop, x, barBottom, nowPaint)
+        }
+
+        // 刻度数字 0/3/6/.../24：色带下方，淡灰色
+        val baseline = barBottom + labelPaint.textSize
+        for (hour in 0..24 step 3) {
+            val text = hour.toString()
+            val half = labelPaint.measureText(text) / 2f
+            // 两端往里收一点，避免 0 和 24 被裁掉
+            val x = (pad + barWidth * (hour / 24f)).coerceIn(half + 1f, width - half - 1f)
+            canvas.drawText(text, x, baseline, labelPaint)
         }
     }
 

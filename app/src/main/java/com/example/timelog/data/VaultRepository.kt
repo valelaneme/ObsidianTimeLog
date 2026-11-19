@@ -174,6 +174,53 @@ class VaultRepository(private val context: Context) {
         return Result.failure(IllegalStateException("没在 md 里找到这条记录对应的行"))
     }
 
+    /**
+     * 编辑一条已有记录：先把原来那一行删掉，再把新内容插到正确的时间位置。
+     * 和 append 一样按时间排序，其它内容（标题、正文、空行）保持原样。
+     *
+     * 只在同一天改时间/内容时只写一次文件；换了日期或跨午夜就分文件写。
+     */
+    fun replaceEntry(oldDate: LocalDate, old: LogEntry, input: LogFormatter.Input): Result<Int> {
+        val root = root() ?: return Result.failure(IllegalStateException("还没有选择日记文件夹"))
+        val newLines = LogFormatter.build(input)
+        if (newLines.isEmpty()) return Result.failure(IllegalStateException("这段时间长度为 0"))
+
+        // 1) 找到旧行所在文件并删掉它（跨午夜那一行可能在前一天）
+        var oldFile: DocumentFile? = null
+        var oldFileDate: LocalDate? = null
+        var oldText: String? = null
+        for (d in listOf(oldDate, oldDate.minusDays(1))) {
+            val f = root.findFile("$d.md") ?: continue
+            val text = readText(f) ?: continue
+            val lines = splitLines(text)
+            val idx = lines.indexOfFirst { it == old.raw }
+            if (idx < 0) continue
+            lines.removeAt(idx)
+            oldFile = f
+            oldFileDate = d
+            oldText = joinLines(lines)
+            break
+        }
+        val file = oldFile ?: return Result.failure(IllegalStateException("没在 md 里找到这条记录对应的行"))
+        val fileDate = oldFileDate ?: oldDate
+        val baseText = oldText.orEmpty()
+
+        // 2) 新内容还在同一天：直接在这份文本上插入，只写一次文件
+        if (newLines.size == 1 && newLines[0].first == fileDate) {
+            return writeText(file, insertSorted(baseText, newLines[0].second), "$fileDate.md")
+                .map { 1 }
+        }
+
+        // 3) 换了日期 / 跨午夜：先把删好的原文件写回，再往目标日期插新行
+        val w = writeText(file, baseText, "$fileDate.md")
+        if (w.isFailure) return w.map { 0 }
+        newLines.forEach { (date, line) ->
+            val r = appendLine(date, line)
+            if (r.isFailure) return Result.failure(r.exceptionOrNull() ?: IllegalStateException("写入失败"))
+        }
+        return Result.success(newLines.size)
+    }
+
     /** 统一换行符、去掉末尾一个换行后按行拆；写回时补一个换行，避免行尾反复增生。 */
     private fun splitLines(text: String): MutableList<String> {
         val normalized = text.replace("\r\n", "\n")
