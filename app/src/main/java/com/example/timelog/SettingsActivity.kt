@@ -5,14 +5,16 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.widget.Button
+import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import com.example.timelog.data.Prefs
 import com.example.timelog.data.VaultRepository
 
 /**
- * 设置页：只管"日记文件夹"这一件事。
+ * 设置页：日记文件夹 + 倒计时默认分钟数。
  *
  * 首页不再放"选择文件夹/刷新"两个按钮：选完文件夹回到首页时，
  * MainActivity 会自动重新读取当天记录和常用候选（见 onResume / onActivityResult）。
@@ -20,8 +22,11 @@ import com.example.timelog.data.VaultRepository
 class SettingsActivity : AppCompatActivity() {
 
     private lateinit var repo: VaultRepository
+    private lateinit var prefs: Prefs
     private lateinit var tvFolder: TextView
     private lateinit var tvInfo: TextView
+    private lateinit var etCountdownMinutes: EditText
+    private lateinit var tvCountdownInfo: TextView
 
     companion object {
         private const val REQ_PICK = 71
@@ -32,8 +37,11 @@ class SettingsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
         repo = VaultRepository(this)
+        prefs = Prefs(this)
         tvFolder = findViewById(R.id.tvSettingsFolder)
         tvInfo = findViewById(R.id.tvSettingsInfo)
+        etCountdownMinutes = findViewById(R.id.etCountdownMinutes)
+        tvCountdownInfo = findViewById(R.id.tvCountdownInfo)
 
         findViewById<Button>(R.id.btnSettingsBack).setOnClickListener { finish() }
         findViewById<Button>(R.id.btnSettingsPick).setOnClickListener { openFolderPicker() }
@@ -42,7 +50,25 @@ class SettingsActivity : AppCompatActivity() {
             finish()
         }
         findViewById<Button>(R.id.btnSettingsClear).setOnClickListener { confirmClear() }
+        findViewById<Button>(R.id.btnSaveCountdown).setOnClickListener { saveCountdownMinutes() }
         refresh()
+        refreshCountdown()
+    }
+
+    private fun refreshCountdown() {
+        etCountdownMinutes.setText(prefs.countdownMinutes.toString())
+        tvCountdownInfo.text = "点首页「倒计时」时用这个数预填（当前 ${prefs.countdownMinutes} 分钟）。"
+    }
+
+    private fun saveCountdownMinutes() {
+        val minutes = etCountdownMinutes.text.toString().trim().toIntOrNull()
+        if (minutes == null || minutes !in 1..600) {
+            Toast.makeText(this, "请输入 1~600 的整数分钟", Toast.LENGTH_SHORT).show()
+            return
+        }
+        prefs.countdownMinutes = minutes
+        refreshCountdown()
+        Toast.makeText(this, "已保存：倒计时默认 $minutes 分钟", Toast.LENGTH_SHORT).show()
     }
 
     private fun refresh() {

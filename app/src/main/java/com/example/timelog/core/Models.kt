@@ -35,10 +35,24 @@ data class Overlap(
     val minutes: Int
 )
 
-/** 解析一段文本的结果：记录 + 提示。 */
+/**
+ * 一行"看着像时间记录、但解析不出来"的原文。
+ *
+ * 以前只当文字提示列出来，用户还得自己去 md 里找；现在带上日期和行号，
+ * 首页会把它红字列进当天列表，点一下就能在录入浮层里改。
+ */
+data class ProblemLine(
+    val date: LocalDate,   // 这行所在的 md 日期
+    val lineNo: Int,       // 文件里的行号（从 1 开始，方便自己去核对）
+    val raw: String,       // 原始行内容
+    val reason: String     // 为什么不行，如"时间数字不合法"
+)
+
+/** 解析一段文本的结果：记录 + 文件级提示 + 行级问题。 */
 data class ParseResult(
     val entries: List<LogEntry>,
-    val warnings: List<String>
+    val warnings: List<String>,
+    val problems: List<ProblemLine> = emptyList()
 )
 
 /** 分类统计（展示用），percent 由该分类时长 / 总时长得到。 */

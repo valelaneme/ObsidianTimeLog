@@ -14,6 +14,8 @@ import android.os.Looper
 import android.text.Editable
 import android.text.TextUtils
 import android.text.TextWatcher
+import android.util.TypedValue
+import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.View
 import android.widget.Button
@@ -30,6 +32,7 @@ import com.example.timelog.core.LogFormatter
 import com.example.timelog.core.LogParser
 import com.example.timelog.core.Overlap
 import com.example.timelog.core.ParseResult
+import com.example.timelog.core.ProblemLine
 import com.example.timelog.data.Prefs
 import com.example.timelog.data.VaultRepository
 import com.example.timelog.core.Suggestions
@@ -42,6 +45,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
+import kotlin.math.abs
 
 /**
  * 只做 UI 编排：底层单日分析首页 + 底部三按钮 + 录入半屏浮层。
@@ -56,6 +60,8 @@ class MainActivity : AppCompatActivity() {
     private var viewDate: LocalDate = LocalDate.now()
     private var entries: List<LogEntry> = emptyList()
     private var warnings: List<String> = emptyList()
+    // 解析不出来的行（红字列在记录列表里，点开就能改）
+    private var problems: List<ProblemLine> = emptyList()
     // 记住上次用的文件夹：从设置页换文件夹回来时自动刷新，不用手动点刷新
     private var lastTreeUri: String? = null
     // onResume 与 onCreate 会连着触发，第一次不重复读
@@ -67,6 +73,9 @@ class MainActivity : AppCompatActivity() {
     private var editing: LogEntry? = null
     // 那条记录的原始行所在的文件名日期（跨午夜时可能是前一天）
     private var editingFileDate: LocalDate? = null
+    // 正在修的那一行问题记录（解析失败的行没有 LogEntry，只认原文）
+    private var editingRaw: String? = null
+    private var editingRawDate: LocalDate? = null
 
     // 历史日志里统计出的常用候选（一级/二级分类、双链）
     private var suggestions = Suggestions.EMPTY
@@ -116,9 +125,47 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * 左右滑动翻日期：左滑看后一天、右滑看前一天。
+     * 用 GestureDetector 判"横向甩动"，竖向滑动仍然交给 ScrollView 正常滚。
+     */
+    private val swipeDetector: GestureDetector by lazy {
+        GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onDown(e: MotionEvent): Boolean = true
+
+            override fun onFling(
+                e1: MotionEvent?,
+                e2: MotionEvent,
+                velocityX: Float,
+                velocityY: Float
+            ): Boolean {
+                if (e1 == null) return false
+                // 录入浮层展开时不翻日期，免得在浮层里滑动把页面甩走
+                if (inputSheet.visibility == View.VISIBLE) return false
+                val dx = e2.x - e1.x
+                val dy = e2.y - e1.y
+                val minDx = 60f * resources.displayMetrics.density
+                // 必须是明显的横向动作：够远、横向占优、速度够快
+                if (abs(dx) < minDx) return false
+                if (abs(dx) < abs(dy) * 1.5f) return false
+                if (abs(velocityX) < 300f) return false
+                shiftDate(if (dx < 0f) 1 else -1)   // 左滑 → 后一天
+                return true
+            }
+        })
+    }
+
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        // 只"旁听"手势，不管结果都继续走正常分发，不影响按钮点击和滚动
+        swipeDetector.onTouchEvent(ev)
+        return super.dispatchTouchEvent(ev)
+    }
+
     companion object {
         private const val REQ_SETTINGS = 42
         private const val REQ_NOTIF = 43
+        // 记录行字号（sp）；行高固定是它的 2 倍
+        private const val ROW_TEXT_SP = 13f
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -257,7 +304,15 @@ class MainActivity : AppCompatActivity() {
             updatePreview()
         }
         btnSave.setOnClickListener { onSaveClick() }
-        btnSheetDelete.setOnClickListener { editing?.let { confirmDelete(it) } }
+        btnSheetDelete.setOnClickListener {
+            val entry = editing
+            val raw = editingRaw
+            val rawDate = editingRawDate
+            when {
+                entry != null -> confirmDelete(entry)
+                raw != null && rawDate != null -> confirmDeleteRawLine(rawDate, raw)
+            }
+        }
 
         val watcher = object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
@@ -308,14 +363,49 @@ class MainActivity : AppCompatActivity() {
         openSheet()
     }
 
-    /** 切换「新录入 / 编辑」两种模式：标题、按钮文字、删除按钮都跟着变。 */
+    /**
+     * 点一条"解析不出来"的红字行：尽力把能认出来的字段填进浮层，
+     * 时间填不出来的就留空，等用户补——补好保存后替换掉原来那一行。
+     */
+    private fun openProblemSheet(problem: ProblemLine) {
+        clearEditTarget()
+        editingRaw = problem.raw
+        editingRawDate = problem.date
+        tvSheetTitle.text = "修正第${problem.lineNo}行：${problem.reason}"
+        btnSave.text = "保存修正"
+        btnSheetDelete.visibility = View.VISIBLE
+
+        val fill = LogParser.partial(problem.raw)
+        etDate.setText(problem.date.toString())
+        etStart.setText(fill.startHm)
+        etEnd.setText(fill.endHm)
+        etL1.setText(fill.level1)
+        etL2.setText(fill.level2)
+        etTitle.setText(fill.title)
+        etLinks.setText(fill.links.joinToString(" "))
+        etNote.setText(fill.note)
+        openSheet()
+    }
+
+    /** 切换「新录入 / 编辑 / 修问题行」三种模式：标题、按钮文字、删除按钮都跟着变。 */
     private fun setEditTarget(entry: LogEntry?, fileDate: LocalDate?) {
+        clearEditTarget()
         editing = entry
         editingFileDate = fileDate
-        val isEdit = entry != null
-        tvSheetTitle.text = if (isEdit) "编辑记录（点 × 收起）" else "录入（下滑或点 × 收起）"
-        btnSave.text = if (isEdit) "保存修改" else "校验并追加到当天 md"
-        btnSheetDelete.visibility = if (isEdit) View.VISIBLE else View.GONE
+        tvSheetTitle.text = if (entry != null) {
+            "编辑记录（点 × 收起）"
+        } else {
+            "录入（下滑或点 × 收起）"
+        }
+        btnSave.text = if (entry != null) "保存修改" else "校验并追加到当天 md"
+        btnSheetDelete.visibility = if (entry != null) View.VISIBLE else View.GONE
+    }
+
+    private fun clearEditTarget() {
+        editing = null
+        editingFileDate = null
+        editingRaw = null
+        editingRawDate = null
     }
 
     /** 原始行写在哪个 md 里：跨午夜拆出来的后半段，实际写在前一天的文件里。 */
@@ -385,6 +475,7 @@ class MainActivity : AppCompatActivity() {
             mainHandler.post {
                 entries = result.entries
                 warnings = result.warnings
+                problems = result.problems
                 refreshFolderLabel()
                 renderStats()
                 renderRecords()
@@ -549,7 +640,10 @@ class MainActivity : AppCompatActivity() {
         }
         val lines = LogFormatter.build(input)
         val sb = StringBuilder()
-        if (editing != null) sb.append("【编辑】保存后替换原来那一行\n")
+        when {
+            editing != null -> sb.append("【编辑】保存后替换原来那一行\n")
+            editingRaw != null -> sb.append("【修正】保存后替换掉那行有问题的记录\n")
+        }
         lines.forEach { (date, line) -> sb.append("$date\n$line\n\n") }
         if (lines.size > 1) sb.append("提示：跨午夜，将按 24 点拆成两天两行。\n")
         tvPreview.text = sb.toString().trimEnd()
@@ -624,28 +718,32 @@ class MainActivity : AppCompatActivity() {
         prefs.title = input.title
         prefs.links = etLinks.text.toString().trim()
 
-        // 先记住编辑目标：closeSheet() 会把 editing 清空
+        // 先记住编辑目标：closeSheet() 会把 editing / editingRaw 清空
         val editingEntry = editing
         val editingDate = editingFileDate
+        val rawLine = editingRaw
+        val rawDate = editingRawDate
 
-        val result = if (editingEntry != null && editingDate != null) {
-            repo.replaceEntry(editingDate, editingEntry, input)
-        } else {
-            repo.append(input)
+        val result = when {
+            rawLine != null && rawDate != null -> repo.replaceLine(rawDate, rawLine, input)
+            editingEntry != null && editingDate != null -> repo.replaceEntry(editingDate, editingEntry, input)
+            else -> repo.append(input)
         }
         if (result.isFailure) {
             Toast.makeText(this, "写入失败：${result.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
             return
         }
 
-        // 编辑已有记录：改完就收工，不走"连续录入"
-        if (editingEntry != null) {
-            Toast.makeText(this, "已更新这条记录", Toast.LENGTH_SHORT).show()
+        // 编辑已有记录 / 修正问题行：改完就收工，不走"连续录入"
+        if (editingEntry != null || rawLine != null) {
+            val msg = if (rawLine != null) "已修正这一行" else "已更新这条记录"
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
             etStart.text.clear()
             etEnd.text.clear()
             etNote.text.clear()
             // 只有真的把日期改到了别的天才跳过去；否则留在当前看的那天（跨午夜那半段不会被甩到前一天）
-            if (input.date != editingDate) viewDate = input.date
+            val oldDate = editingDate ?: rawDate
+            if (oldDate == null || input.date != oldDate) viewDate = input.date
             closeSheet()
             reload()
             suggestions = Suggestions.EMPTY
@@ -728,20 +826,25 @@ class MainActivity : AppCompatActivity() {
                 .show()
             return
         }
+        // 分钟数用设置页里那个值预填，改一次就记住，下次直接点「开始」
         val input = android.widget.EditText(this).apply {
             inputType = android.text.InputType.TYPE_CLASS_NUMBER
             hint = "分钟数，如 25"
+            setText(prefs.countdownMinutes.toString())
+            setSelection(text.length)
         }
         AlertDialog.Builder(this)
             .setTitle("倒计时多少分钟")
-            .setMessage("到点弹通知，关掉 App 也会提醒")
+            .setMessage("默认 ${prefs.countdownMinutes} 分钟（可在设置页改）。到点弹通知，关掉 App 也会提醒。")
             .setView(input)
             .setPositiveButton("开始") { _, _ ->
-                val minutes = input.text.toString().toLongOrNull() ?: 0L
+                val minutes = input.text.toString().trim().toLongOrNull() ?: 0L
                 if (minutes <= 0) {
                     Toast.makeText(this, "请输入大于 0 的分钟数", Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
+                // 这次用的数字顺手记成默认值，下次不用再改
+                prefs.countdownMinutes = minutes.toInt()
                 startCountdown(minutes)
             }
             .setNegativeButton("取消", null)
@@ -842,14 +945,15 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // 解析提示：全部列出，没有就整块不显示
+        // 只有文件级问题（如没选文件夹、文件名没日期）才留在这一块；
+        // 单行的时间问题已经变成下面记录列表里的红字行，这里不再重复列
         if (warnings.isEmpty()) {
             tvWarnings.visibility = View.GONE
             tvWarnings.text = ""
         } else {
             tvWarnings.visibility = View.VISIBLE
             tvWarnings.text = buildString {
-                append("解析提示（共 ${warnings.size} 条）\n")
+                append("提示（共 ${warnings.size} 条）\n")
                 warnings.forEach { append("· ").append(it).append("\n") }
             }.trimEnd()
         }
@@ -862,11 +966,13 @@ class MainActivity : AppCompatActivity() {
     /**
      * 逐条列出当天所有记录。两条时间不相连时，中间插一个"半行高"的空档，
      * 高度固定是普通记录行的一半，视觉上一眼就能看出哪段时间漏记了。
+     *
+     * 解析不出来的行（时间写错等）红字排在最后，点一下就能改或删。
      */
     private fun renderRecords() {
         recordsContainer.removeAllViews()
-        // 每条记录压成一行，行高和上下留白都缩小
-        val rowHeight = (36f * resources.displayMetrics.density).toInt()
+        // 行高 = 字号 2 倍（跟随系统字体缩放），上下不再另留白
+        val rowHeight = rowHeightPx()
 
         if (repo.root() == null) {
             recordsContainer.addView(hintView("还没选择日记文件夹，请点右上角「设置」选择。"))
@@ -874,7 +980,7 @@ class MainActivity : AppCompatActivity() {
         }
         val day = entries.filter { it.date == viewDate }
             .sortedWith(compareBy<LogEntry>({ it.startMin }, { it.endMin }))
-        if (day.isEmpty()) {
+        if (day.isEmpty() && problems.isEmpty()) {
             recordsContainer.addView(hintView("$viewDate 还没有时间记录。"))
             return
         }
@@ -885,9 +991,61 @@ class MainActivity : AppCompatActivity() {
             }
             recordsContainer.addView(recordRow(entry, rowHeight))
         }
-        if (warnings.isNotEmpty()) {
-            recordsContainer.addView(hintView("另有 ${warnings.size} 行没能识别为时间记录，详见上方解析提示。"))
+
+        // 有问题的行：红字列出，点开可改可删
+        if (problems.isNotEmpty()) {
+            recordsContainer.addView(problemHeader(problems.size))
+            problems.forEach { recordsContainer.addView(problemRow(it, rowHeight)) }
         }
+    }
+
+    /** 记录行高 = 字号的 2 倍。 */
+    private fun rowHeightPx(): Int = TypedValue.applyDimension(
+        TypedValue.COMPLEX_UNIT_SP,
+        ROW_TEXT_SP * 2f,
+        resources.displayMetrics
+    ).toInt()
+
+    private fun problemHeader(count: Int): TextView = TextView(this).apply {
+        text = "以下 $count 行时间有问题，点一下就能改"
+        textSize = 12f
+        setTextColor(Color.parseColor("#C5221F"))
+        setPadding(0, dp(6), 0, dp(2))
+    }
+
+    /** 一行问题记录：红底红字，点开回填浮层修正；解析失败的行没有 LogEntry，只认原文。 */
+    private fun problemRow(problem: ProblemLine, height: Int): View {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setBackgroundColor(Color.parseColor("#FDECEA"))
+            setPadding(dp(3), 0, dp(6), 0)
+            minimumHeight = height
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { openProblemSheet(problem) }
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { setMargins(0, 0, 0, dp(1)) }
+        }
+
+        row.addView(View(this).apply {
+            setBackgroundColor(Color.parseColor("#D93025"))
+            layoutParams = LinearLayout.LayoutParams(dp(3), LinearLayout.LayoutParams.MATCH_PARENT)
+        })
+
+        row.addView(TextView(this).apply {
+            text = "第${problem.lineNo}行 ${problem.reason}：" +
+                problem.raw.trim().let { if (it.isEmpty()) "（空行）" else it }
+            textSize = ROW_TEXT_SP
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+            setTextColor(Color.parseColor("#C5221F"))
+            setPadding(dp(7), 0, 0, 0)
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        })
+        return row
     }
 
     private fun hintView(message: String): TextView = TextView(this).apply {
@@ -900,7 +1058,7 @@ class MainActivity : AppCompatActivity() {
     /** 半行高的空档：留白为主，中间一行淡灰小字说明空了多久。 */
     private fun gapView(minutes: Int, height: Int): TextView = TextView(this).apply {
         text = "· · ·  空 ${Formatters.duration(minutes)}  · · ·"
-        textSize = 11f
+        textSize = 9f
         gravity = Gravity.CENTER
         setTextColor(Color.parseColor("#9AA0A6"))
         layoutParams = LinearLayout.LayoutParams(
@@ -943,7 +1101,7 @@ class MainActivity : AppCompatActivity() {
                 if (entry.links.isNotEmpty()) append(" ").append(entry.links.joinToString(" "))
                 if (entry.note.isNotBlank()) append(" ").append(entry.note)
             }
-            textSize = 13f
+            textSize = ROW_TEXT_SP
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
             setTextColor(Color.parseColor("#202124"))
@@ -991,6 +1149,33 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }.start()
+    }
+
+    /** 删掉一行"解析不出来"的原文（问题行）。 */
+    private fun confirmDeleteRawLine(date: LocalDate, rawLine: String) {
+        AlertDialog.Builder(this)
+            .setTitle("删掉这一行？")
+            .setMessage("$rawLine\n\n只会从 $date.md 里删掉这一行，其它内容不动。")
+            .setPositiveButton("删除") { _, _ ->
+                Thread {
+                    val result = repo.deleteLine(date, rawLine)
+                    mainHandler.post {
+                        if (result.isSuccess) {
+                            Toast.makeText(this@MainActivity, "已删除这一行", Toast.LENGTH_SHORT).show()
+                            closeSheet()
+                            reload()
+                        } else {
+                            Toast.makeText(
+                                this@MainActivity,
+                                "删除失败：${result.exceptionOrNull()?.message}",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    }
+                }.start()
+            }
+            .setNegativeButton("取消", null)
+            .show()
     }
 
     /** 首页内嵌的重叠显示；保存前校验时传入候选重叠做即时提示。没有重叠就整块隐藏。 */

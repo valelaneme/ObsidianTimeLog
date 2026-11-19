@@ -11,6 +11,7 @@ import com.example.timelog.core.LogEntry
 import java.time.LocalDate
 import java.time.LocalDateTime
 import kotlin.math.max
+import kotlin.math.min
 
 /**
  * 24 小时时间轴：一眼看清"哪段记了、哪段空着、哪段重叠"。
@@ -65,6 +66,7 @@ class TimelineView @JvmOverloads constructor(
         // 刻度条：宽度减半（10sp 字 + 4dp 留白），整体挪到色带下方
         val rulerHeight = labelPaint.textSize + 4f * density
         val barTop = 2f * density
+        // 色带上下高度只要原来的一半：视图高度已按此收窄，这里再兜一层
         val barBottom = height - rulerHeight
         val barWidth = width - pad * 2f
         if (barBottom <= barTop || barWidth <= 0f) return
@@ -80,8 +82,8 @@ class TimelineView @JvmOverloads constructor(
             canvas.drawRect(x1, barTop, max(x1 + 2f, x2), barBottom, segmentPaint)
         }
 
-        // 重叠区间（顶部红条）
-        val stripeBottom = barTop + 6f * density
+        // 重叠区间（顶部红条）：色带变矮了，红条也跟着收窄
+        val stripeBottom = barTop + min(4f * density, (barBottom - barTop) * 0.3f)
         Analyzer.overlaps(entries).forEach { o ->
             val start = maxOf(o.first.startMin, o.second.startMin)
             val end = minOf(o.first.endMin, o.second.endMin)

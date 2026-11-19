@@ -7,6 +7,7 @@ import com.example.timelog.core.LogEntry
 import com.example.timelog.core.LogFormatter
 import com.example.timelog.core.LogParser
 import com.example.timelog.core.ParseResult
+import com.example.timelog.core.ProblemLine
 import com.example.timelog.core.Suggestions
 import java.time.LocalDate
 
@@ -33,6 +34,7 @@ class VaultRepository(private val context: Context) {
         val root = root() ?: return ParseResult(emptyList(), listOf("还没有选择日记文件夹"))
         val entries = mutableListOf<LogEntry>()
         val warnings = mutableListOf<String>()
+        val problems = mutableListOf<ProblemLine>()
         listOf(date.minusDays(1), date).forEach { d ->
             val file = root.findFile("$d.md") ?: return@forEach
             val text = readText(file) ?: return@forEach
@@ -40,8 +42,10 @@ class VaultRepository(private val context: Context) {
             // 前一天文件里，可能含有跨午夜落到 date 的那一条；只要 date 当天的条目
             entries.addAll(result.entries.filter { it.date == date })
             warnings.addAll(result.warnings)
+            // 问题行只取当天的：看哪一天的页面就修哪一天的文件，免得串天
+            problems.addAll(result.problems.filter { it.date == date })
         }
-        return ParseResult(entries.sortedBy { it.startMin }, warnings)
+        return ParseResult(entries.sortedBy { it.startMin }, warnings, problems)
     }
 
     /** 只读指定日期这同一个文件，用于跨午夜录入时补查"次日"是否已有重叠记录。 */
@@ -159,14 +163,17 @@ class VaultRepository(private val context: Context) {
      * 删除一条记录：按解析时保存的原始行精确匹配，只删那一行。
      * 先在当天文件找；跨午夜记录的那一行写在"前一天"文件里，再回退找前一天。
      */
-    fun deleteEntry(date: LocalDate, entry: LogEntry): Result<String> {
+    fun deleteEntry(date: LocalDate, entry: LogEntry): Result<String> = deleteLine(date, entry.raw)
+
+    /** 删除"某一天文件里的某一整行"（解析失败的问题行也走这里）。 */
+    fun deleteLine(date: LocalDate, rawLine: String): Result<String> {
         val root = root() ?: return Result.failure(IllegalStateException("还没有选择日记文件夹"))
         for (d in listOf(date, date.minusDays(1))) {
             val fileName = "$d.md"
             val file = root.findFile(fileName) ?: continue
             val text = readText(file) ?: continue
             val lines = splitLines(text)
-            val idx = lines.indexOfFirst { it == entry.raw }
+            val idx = lines.indexOfFirst { it == rawLine }
             if (idx < 0) continue
             lines.removeAt(idx)
             return writeText(file, joinLines(lines), fileName)
@@ -174,13 +181,16 @@ class VaultRepository(private val context: Context) {
         return Result.failure(IllegalStateException("没在 md 里找到这条记录对应的行"))
     }
 
+    fun replaceEntry(oldDate: LocalDate, old: LogEntry, input: LogFormatter.Input): Result<Int> =
+        replaceLine(oldDate, old.raw, input)
+
     /**
-     * 编辑一条已有记录：先把原来那一行删掉，再把新内容插到正确的时间位置。
-     * 和 append 一样按时间排序，其它内容（标题、正文、空行）保持原样。
+     * 把"某一天文件里的某一行"换成新内容（问题行修正也走这里）。
      *
-     * 只在同一天改时间/内容时只写一次文件；换了日期或跨午夜就分文件写。
+     * 步骤：先在原文件按原文精确删掉那一行，再把新内容按开始时间插到正确位置；
+     * 同一天只写一次文件，换日期或跨午夜就分文件写。
      */
-    fun replaceEntry(oldDate: LocalDate, old: LogEntry, input: LogFormatter.Input): Result<Int> {
+    fun replaceLine(oldDate: LocalDate, rawLine: String, input: LogFormatter.Input): Result<Int> {
         val root = root() ?: return Result.failure(IllegalStateException("还没有选择日记文件夹"))
         val newLines = LogFormatter.build(input)
         if (newLines.isEmpty()) return Result.failure(IllegalStateException("这段时间长度为 0"))
@@ -193,7 +203,7 @@ class VaultRepository(private val context: Context) {
             val f = root.findFile("$d.md") ?: continue
             val text = readText(f) ?: continue
             val lines = splitLines(text)
-            val idx = lines.indexOfFirst { it == old.raw }
+            val idx = lines.indexOfFirst { it == rawLine }
             if (idx < 0) continue
             lines.removeAt(idx)
             oldFile = f

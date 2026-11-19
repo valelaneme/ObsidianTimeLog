@@ -37,12 +37,22 @@ class Prefs(context: Context) {
         get() = sp.getLong(KEY_COUNTDOWN_END, 0L)
         set(value) = sp.edit().putLong(KEY_COUNTDOWN_END, value).apply()
 
+    /**
+     * 倒计时默认分钟数（整数）。设置页可改，点"倒计时"时用它预填，
+     * 改过之后下次还用这个数，不用每次重打。
+     */
+    var countdownMinutes: Int
+        get() = sp.getInt(KEY_COUNTDOWN_MINUTES, DEFAULT_COUNTDOWN_MINUTES)
+        set(value) = sp.edit().putInt(KEY_COUNTDOWN_MINUTES, value).apply()
+
     companion object {
+        const val DEFAULT_COUNTDOWN_MINUTES = 25
         private const val KEY_L1 = "level1"
         private const val KEY_L2 = "level2"
         private const val KEY_TITLE = "title"
         private const val KEY_LINKS = "links"
         private const val KEY_STOPWATCH = "stopwatch_start"
         private const val KEY_COUNTDOWN_END = "countdown_end"
+        private const val KEY_COUNTDOWN_MINUTES = "countdown_minutes"
     }
 }

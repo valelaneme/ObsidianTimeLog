@@ -73,10 +73,11 @@
                 </LinearLayout>
 
                 <!-- 24 小时时间轴：颜色=一级分类，红条=重叠，灰底=空白，蓝线=现在 -->
+                <!-- 色带本身只有 20dp 高（原来 40dp 的一半），刻度数字在它下方 -->
                 <com.example.timelog.ui.TimelineView
                     android:id="@+id/timeline"
                     android:layout_width="match_parent"
-                    android:layout_height="56dp"
+                    android:layout_height="36dp"
                     android:layout_marginTop="4dp"
                     android:contentDescription="当天时间轴" />
 

@@ -86,6 +86,54 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:paddingTop="20dp"
+                android:text="倒计时"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingTop="6dp">
+
+                <EditText
+                    android:id="@+id/etCountdownMinutes"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:hint="分钟数"
+                    android:inputType="number"
+                    android:maxLength="3" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:paddingStart="6dp"
+                    android:paddingEnd="6dp"
+                    android:text="分钟"
+                    android:textSize="14sp" />
+
+                <Button
+                    android:id="@+id/btnSaveCountdown"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="保存" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/tvCountdownInfo"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp"
+                android:text="点首页「倒计时」时用这个数预填，改一次就记住。"
+                android:textSize="12sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="20dp"
                 android:text="说明"
                 android:textSize="16sp"
                 android:textStyle="bold" />
