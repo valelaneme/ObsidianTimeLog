@@ -3,20 +3,22 @@ plugins {
     id 'org.jetbrains.kotlin.android'
 }
 
-// 版本号由编译时刻生成，不依赖 CI 环境变量（workflow 的 .github 隐藏文件夹手动上传易漏）。
-// 每次云端编译都会得到递增的版本号，覆盖安装不会被系统当成同一版本。
+// 版本号分两个，各管各的：
+//   versionName = 人看的版本号（1.6.1），发版时**只改下面这一行**。
+//                 它决定 APK 文件名 Timelog-1.6.1.apk、Release 标签 v1.6.1、手机「应用信息」里显示的数字。
+//   versionCode = 系统看的序号，由编译时刻的分钟数自动生成（约 2900 万，远低于 Android 上限 21 亿）。
+//                 手机上不显示，但**每次编译都会变大**，所以覆盖安装不会被系统当成同一版本。
+def appVersionName = '1.6.1'
+
 def buildStamp = System.currentTimeMillis()
-def ciBuildNumber = (buildStamp / 60000L) as int       // 分钟级序号，约 2900 万，远低于 Android 上限 21 亿
-def sdf = new java.text.SimpleDateFormat('yyyyMMdd.HHmm')
-sdf.setTimeZone(TimeZone.getTimeZone('Asia/Shanghai'))
-def ciBuildName = sdf.format(new Date(buildStamp))
+def ciBuildNumber = (buildStamp / 60000L) as int       // 分钟级序号，只给 versionCode 用
 
 // 把这次的版本号落盘，供 workflow 给 APK 改文件名用。
-// 关键：文件名必须用 Gradle 真实算出的版本号，不能在 shell 里按时间另算一次，
-// 否则编译耗时跨分钟时，文件名会和 App 里显示的版本号对不上。
+// 关键：文件名必须用 Gradle 真实使用的版本号，不能在 shell 里另算一次，
+// 否则文件名会和 App 里显示的版本号对不上。
 def versionOut = new File(project.buildDir, 'timelog-versionName.txt')
 versionOut.parentFile.mkdirs()
-versionOut.text = "1.0.${ciBuildName}\n"
+versionOut.text = "${appVersionName}\n"
 
 // ---- 正式签名 ----
 // GitHub 仓库里已存 4 个 Secrets：KEYSTORE_BASE64 / KEYSTORE_PASSWORD / KEY_ALIAS / KEY_PASSWORD。
@@ -41,7 +43,7 @@ android {
         minSdk 26
         targetSdk 34
         versionCode ciBuildNumber
-        versionName "1.0.${ciBuildName}"
+        versionName appVersionName
     }
 
     // 只在拿到完整签名信息时才创建；名字叫 release，但 debug/release 两个构建都用它，
