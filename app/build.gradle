@@ -1,76 +1,39 @@
-plugins {
-    id 'com.android.application'
-    id 'org.jetbrains.kotlin.android'
-}
-
-// 版本号由编译时刻生成，不依赖 CI 环境变量（workflow 的 .github 隐藏文件夹手动上传易漏）。
-// 每次云端编译都会得到递增的版本号，覆盖安装不会被系统当成同一版本。
-def buildStamp = System.currentTimeMillis()
-def ciBuildNumber = (buildStamp / 60000L) as int       // 分钟级序号，约 2900 万，远低于 Android 上限 21 亿
-def sdf = new java.text.SimpleDateFormat('yyyyMMdd.HHmm')
-sdf.setTimeZone(TimeZone.getTimeZone('Asia/Shanghai'))
-def ciBuildName = sdf.format(new Date(buildStamp))
-
-// ---- 正式签名 ----
-// GitHub 仓库里已存 4 个 Secrets：KEYSTORE_BASE64 / KEYSTORE_PASSWORD / KEY_ALIAS / KEY_PASSWORD。
-// workflow 会把 BASE64 解码成临时 keystore 文件，并把 4 个值作为环境变量传进来。
-// 四项齐全才用你自己的密钥签名；缺任意一项就回退到系统默认调试签名，
-// 保证换电脑、本地编译、Secret 临时没配时，依然能编出可安装的 APK。
-def ksFile = System.getenv('KEYSTORE_FILE')
-def ksPassword = System.getenv('KEYSTORE_PASSWORD')
-def keyAlias = System.getenv('KEY_ALIAS')
-def keyPassword = System.getenv('KEY_PASSWORD')
-def hasSigning = ksFile && ksPassword && keyAlias && keyPassword && file(ksFile).exists()
-println(hasSigning
-    ? "TimeLog: 使用正式签名 -> $ksFile"
-    : 'TimeLog: 未检测到签名配置，回退默认调试签名')
-
 android {
-    namespace 'com.example.timelog'
-    compileSdk 34
+    // ... 保持你原有的 compileSdk、defaultConfig 等配置不变 ...
 
-    defaultConfig {
-        applicationId 'com.example.timelog'
-        minSdk 26
-        targetSdk 34
-        versionCode ciBuildNumber
-        versionName "1.0.${ciBuildName}"
-    }
-
-    // 只在拿到完整签名信息时才创建；名字叫 release，但 debug/release 两个构建都用它，
-    // 这样无论跑哪个 assemble，签名都稳定一致，不会每次换钥匙。
     signingConfigs {
-        if (hasSigning) {
-            release {
-                storeFile file(ksFile)
-                storePassword ksPassword
-                keyAlias keyAlias
-                keyPassword keyPassword
+        // 统一使用 release 签名配置（Debug 也可以共用，或者单独写）
+        release {
+            // 1. 避免局部临时变量名与 storeFile/storePassword/keyAlias/keyPassword 重名
+            def envKeystorePath = System.getenv("KEYSTORE_PATH") ?: System.getenv("SIGNING_KEY_STORE_PATH")
+            def envStorePass = System.getenv("KEYSTORE_PASSWORD") ?: System.getenv("SIGNING_STORE_PASSWORD")
+            def envKeyAlias = System.getenv("KEY_ALIAS") ?: System.getenv("SIGNING_KEY_ALIAS")
+            def envKeyPass = System.getenv("KEY_PASSWORD") ?: System.getenv("SIGNING_KEY_PASSWORD")
+
+            if (envKeystorePath && file(envKeystorePath).exists()) {
+                println "TimeLog: 使用正式签名 -> ${envKeystorePath}"
+                // 2. 下面这四行必须明确使用 = 赋值，不能省略等号！
+                storeFile = file(envKeystorePath)
+                storePassword = envStorePass
+                keyAlias = envKeyAlias
+                keyPassword = envKeyPass
             }
         }
     }
 
     buildTypes {
         debug {
-            if (hasSigning) signingConfig signingConfigs.release
+            // 如果你的 workflow 运行的是 assembleDebug，这里需要关联上面的 signingConfig
+            if (signingConfigs.release.storeFile != null) {
+                signingConfig signingConfigs.release
+            }
         }
         release {
-            if (hasSigning) signingConfig signingConfigs.release
             minifyEnabled false
+            if (signingConfigs.release.storeFile != null) {
+                signingConfig signingConfigs.release
+            }
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
-    compileOptions {
-        sourceCompatibility JavaVersion.VERSION_17
-        targetCompatibility JavaVersion.VERSION_17
-    }
-    kotlinOptions {
-        jvmTarget = '17'
-    }
-}
-
-dependencies {
-    implementation 'androidx.core:core-ktx:1.12.0'
-    implementation 'androidx.appcompat:appcompat:1.6.1'
-    implementation 'androidx.documentfile:documentfile:1.0.1'
 }
