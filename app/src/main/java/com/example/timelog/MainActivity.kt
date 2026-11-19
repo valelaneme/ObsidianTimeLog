@@ -15,7 +15,6 @@ import android.text.Editable
 import android.text.TextUtils
 import android.text.TextWatcher
 import android.util.TypedValue
-import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.View
 import android.widget.Button
@@ -134,39 +133,41 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // 翻日期手势：按下位置 + 是否正在跟踪。松开手指时按位移判断，慢速滑也能翻
+    private var swipeDownX = 0f
+    private var swipeDownY = 0f
+    private var swipeTracking = false
+
     /**
      * 左右滑动翻日期：左滑看后一天、右滑看前一天。
-     * 用 GestureDetector 判"横向甩动"，竖向滑动仍然交给 ScrollView 正常滚。
+     * 不再要求"甩"的速度，只要横向位移 >= 40dp 且明显比纵向多（1.2 倍）就算滑动，
+     * 这样慢慢划也能翻页；竖着划仍然是 ScrollView 正常滚动。
+     * 录入浮层展开时完全不响应，免得在面板里滑动把页面甩走。
      */
-    private val swipeDetector: GestureDetector by lazy {
-        GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
-            override fun onDown(e: MotionEvent): Boolean = true
-
-            override fun onFling(
-                e1: MotionEvent?,
-                e2: MotionEvent,
-                velocityX: Float,
-                velocityY: Float
-            ): Boolean {
-                if (e1 == null) return false
-                // 录入浮层展开时不翻日期，免得在浮层里滑动把页面甩走
-                if (inputSheet.visibility == View.VISIBLE) return false
-                val dx = e2.x - e1.x
-                val dy = e2.y - e1.y
-                val minDx = 60f * resources.displayMetrics.density
-                // 必须是明显的横向动作：够远、横向占优、速度够快
-                if (abs(dx) < minDx) return false
-                if (abs(dx) < abs(dy) * 1.5f) return false
-                if (abs(velocityX) < 300f) return false
-                shiftDate(if (dx < 0f) 1 else -1)   // 左滑 → 后一天
-                return true
-            }
-        })
-    }
-
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
-        // 只"旁听"手势，不管结果都继续走正常分发，不影响按钮点击和滚动
-        swipeDetector.onTouchEvent(ev)
+        if (inputSheet.visibility == View.VISIBLE) {
+            swipeTracking = false
+        } else {
+            when (ev.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    swipeDownX = ev.x
+                    swipeDownY = ev.y
+                    swipeTracking = true
+                }
+                MotionEvent.ACTION_UP -> {
+                    if (swipeTracking) {
+                        val dx = ev.x - swipeDownX
+                        val dy = ev.y - swipeDownY
+                        val minDx = 40f * resources.displayMetrics.density
+                        if (abs(dx) >= minDx && abs(dx) >= abs(dy) * 1.2f) {
+                            shiftDate(if (dx < 0f) 1 else -1)   // 左滑 → 后一天
+                        }
+                    }
+                    swipeTracking = false
+                }
+                MotionEvent.ACTION_CANCEL -> swipeTracking = false
+            }
+        }
         return super.dispatchTouchEvent(ev)
     }
 
