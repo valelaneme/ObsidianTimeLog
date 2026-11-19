@@ -92,10 +92,10 @@ class VaultRepository(private val context: Context) {
 
     /**
      * 保存一条录入。跨午夜时 LogFormatter 会给出两行（分属两天），
-     * 这里逐行追加到各自日期的 md，实现"跨午夜按 24 点切两天"。
+     * 逐行写进各自日期的 md；每行按开始时间插到正确位置，其它内容保持原样。
      */
     fun append(input: LogFormatter.Input): Result<Int> {
-        val root = root() ?: return Result.failure(IllegalStateException("还没有选择日记文件夹"))
+        if (root() == null) return Result.failure(IllegalStateException("还没有选择日记文件夹"))
         val lines = LogFormatter.build(input)
         lines.forEach { (date, line) ->
             val r = appendLine(date, line)
@@ -113,15 +113,82 @@ class VaultRepository(private val context: Context) {
                 ?: return Result.failure(IllegalStateException("创建 $fileName 失败"))
         }
         val existing = readText(file).orEmpty()
-        val newText = when {
-            existing.isEmpty() -> line + "\n"
-            existing.endsWith("\n") -> existing + line + "\n"
-            else -> existing + "\n" + line + "\n"
+        return writeText(file, insertSorted(existing, line), fileName)
+    }
+
+    /**
+     * 把新记录行按开始时间插进已有记录序列，而不是一律追加到文件末尾。
+     * 只重排"记录行"（含 ==HH:MM - HH:MM==），标题、正文、空行都留在原位。
+     */
+    private fun insertSorted(existing: String, newLine: String): String {
+        val lines = splitLines(existing)
+        val recordIdx = lines.indices.filter { LogParser.timeOfLine(lines[it]) != null }
+        if (recordIdx.isEmpty()) {
+            lines.add(newLine)
+        } else {
+            val ordered = recordIdx.map { lines[it] }.toMutableList()
+            ordered.add(newLine)
+            ordered.sortWith(
+                compareBy<String>(
+                    { LogParser.timeOfLine(it)!!.first },
+                    { LogParser.timeOfLine(it)!!.second }
+                )
+            )
+            val idxSet = recordIdx.toSet()
+            val lastSlot = recordIdx.last()
+            val out = mutableListOf<String>()
+            var cursor = 0
+            lines.forEachIndexed { i, text ->
+                if (i in idxSet) {
+                    if (cursor < ordered.size) { out.add(ordered[cursor]); cursor++ }
+                } else {
+                    out.add(text)
+                }
+                // 新多出来的那一条接在最后一条记录行之后，整体仍然按时间有序
+                if (i == lastSlot) {
+                    while (cursor < ordered.size) { out.add(ordered[cursor]); cursor++ }
+                }
+            }
+            lines.clear()
+            lines.addAll(out)
         }
+        return joinLines(lines)
+    }
+
+    /**
+     * 删除一条记录：按解析时保存的原始行精确匹配，只删那一行。
+     * 先在当天文件找；跨午夜记录的那一行写在"前一天"文件里，再回退找前一天。
+     */
+    fun deleteEntry(date: LocalDate, entry: LogEntry): Result<Int> {
+        val root = root() ?: return Result.failure(IllegalStateException("还没有选择日记文件夹"))
+        for (d in listOf(date, date.minusDays(1))) {
+            val fileName = "$d.md"
+            val file = root.findFile(fileName) ?: continue
+            val text = readText(file) ?: continue
+            val lines = splitLines(text)
+            val idx = lines.indexOfFirst { it == entry.raw }
+            if (idx < 0) continue
+            lines.removeAt(idx)
+            return writeText(file, joinLines(lines), fileName)
+        }
+        return Result.failure(IllegalStateException("没在 md 里找到这条记录对应的行"))
+    }
+
+    /** 统一换行符、去掉末尾一个换行后按行拆；写回时补一个换行，避免行尾反复增生。 */
+    private fun splitLines(text: String): MutableList<String> {
+        val normalized = text.replace("\r\n", "\n")
+        val body = if (normalized.endsWith("\n")) normalized.dropLast(1) else normalized
+        return if (body.isEmpty()) mutableListOf() else body.split("\n").toMutableList()
+    }
+
+    private fun joinLines(lines: List<String>): String =
+        if (lines.isEmpty()) "" else lines.joinToString("\n") + "\n"
+
+    private fun writeText(file: DocumentFile, text: String, fileName: String): Result<String> {
         return try {
             val out = context.contentResolver.openOutputStream(file.uri, "wt")
                 ?: return Result.failure(IllegalStateException("无法写入 $fileName"))
-            out.use { it.write(newText.toByteArray(Charsets.UTF_8)) }
+            out.use { it.write(text.toByteArray(Charsets.UTF_8)) }
             Result.success(fileName)
         } catch (e: Exception) {
             Result.failure(e)

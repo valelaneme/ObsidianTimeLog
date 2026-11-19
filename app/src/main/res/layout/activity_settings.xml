@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#FFFFFFFF"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="设置"
+            android:textSize="22sp"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/btnSettingsBack"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="返回" />
+    </LinearLayout>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingTop="12dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="日记文件夹"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvSettingsFolder"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="6dp"
+                android:paddingBottom="6dp"
+                android:text="尚未选择日记文件夹"
+                android:textIsSelectable="true"
+                android:textSize="14sp" />
+
+            <Button
+                android:id="@+id/btnSettingsPick"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="选择日记文件夹" />
+
+            <TextView
+                android:id="@+id/tvSettingsInfo"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="6dp"
+                android:paddingBottom="12dp"
+                android:text="请选择 Obsidian 里存放每日 md 文件的文件夹。"
+                android:textSize="12sp" />
+
+            <Button
+                android:id="@+id/btnSettingsReload"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="重新读取（回首页刷新）" />
+
+            <Button
+                android:id="@+id/btnSettingsClear"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="清除文件夹选择" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="20dp"
+                android:text="说明"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="6dp"
+                android:text="· 每次选择新文件夹，回到首页会自动重新读取当天记录和常用候选，不用手动刷新。\n· 数据始终保存在你自己的 md 文件里，App 只按你选的文件夹读写，不会改名或搬走文件。\n· 清除选择只会取消 App 的授权，不会删除任何 md 文件。\n· 新记录会按开始时间插进当天 md 的正确位置，文件里其它文字保持原样。"
+                android:textSize="13sp" />
+        </LinearLayout>
+    </ScrollView>
+</LinearLayout>
