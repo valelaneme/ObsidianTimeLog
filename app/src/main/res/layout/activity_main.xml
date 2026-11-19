@@ -298,15 +298,16 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:paddingStart="16dp"
-                android:text="录入（下滑或点 × 收起）"
+                android:text="录入（下滑或点「返回」退出）"
                 android:textSize="13sp"
                 android:textStyle="bold" />
 
             <Button
                 android:id="@+id/btnHideSheet"
-                android:layout_width="56dp"
+                android:layout_width="64dp"
                 android:layout_height="wrap_content"
-                android:text="×" />
+                android:text="返回"
+                android:textSize="12sp" />
         </LinearLayout>
 
         <ScrollView

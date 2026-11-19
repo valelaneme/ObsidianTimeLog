@@ -3,7 +3,6 @@ package com.example.timelog
 import android.Manifest
 import android.app.Activity
 import android.app.AlarmManager
-import android.app.DatePickerDialog
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
@@ -396,9 +395,9 @@ class MainActivity : AppCompatActivity() {
         editing = entry
         editingFileDate = fileDate
         tvSheetTitle.text = if (entry != null) {
-            "编辑记录（点 × 收起）"
+            "编辑记录（点「返回」退出）"
         } else {
-            "录入（下滑或点 × 收起）"
+            "录入（下滑或点「返回」退出）"
         }
         btnSave.text = if (entry != null) "保存修改" else "校验并追加到当天 md"
         btnSheetDelete.visibility = if (entry != null) View.VISIBLE else View.GONE
@@ -502,27 +501,36 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * 点顶栏日期：弹系统日期选择器，默认停在正在看的那天，显示当月。
-     * maxDate 设成现在，未来的日子直接灰掉点不了。
+     * 点顶栏日期：弹出一个只有日历的窗口（没有"确定/取消"按钮）。
+     * 点哪天就立即切到哪天并关掉窗口；点外面或按返回键也能关掉。
+     * maxDate = 现在，未来的日子灰掉点不了。
      */
     private fun showDatePicker() {
-        val picker = DatePickerDialog(
-            this,
-            { _, year, month, day ->
-                val picked = LocalDate.of(year, month + 1, day)
-                if (picked.isAfter(LocalDate.now())) {
-                    Toast.makeText(this, "还没到那一天", Toast.LENGTH_SHORT).show()
-                } else {
-                    pendingSlideDir = if (picked.isAfter(viewDate)) 1 else -1
-                    goToDate(picked)
-                }
-            },
-            viewDate.year,
-            viewDate.monthValue - 1,
-            viewDate.dayOfMonth
-        )
-        picker.datePicker.maxDate = System.currentTimeMillis()
-        picker.show()
+        val today = LocalDate.now()
+        val calendar = android.widget.CalendarView(this).apply {
+            maxDate = System.currentTimeMillis()
+            // 先设日期再挂监听，避免程序自己设日期时误触发一次"点选"
+            date = viewDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("选择日期（最晚到今天）")
+            .setView(calendar)
+            .create()
+        var picked = false
+        calendar.setOnDateChangeListener { _, year, month, day ->
+            if (picked) return@setOnDateChangeListener
+            val chosen = LocalDate.of(year, month + 1, day)
+            if (chosen.isAfter(today)) {
+                Toast.makeText(this, "还没到那一天", Toast.LENGTH_SHORT).show()
+                return@setOnDateChangeListener
+            }
+            picked = true
+            dialog.dismiss()
+            pendingSlideDir = if (chosen.isAfter(viewDate)) 1 else -1
+            goToDate(chosen)
+        }
+        dialog.setCanceledOnTouchOutside(true)
+        dialog.show()
     }
 
     /**
@@ -853,6 +861,8 @@ class MainActivity : AppCompatActivity() {
             val endMs = System.currentTimeMillis()
             etStart.setText(hm(start))
             etEnd.setText(hm(endMs))
+            // 计时是真实发生的，日期按今天走，不跟着首页正在看的那天走
+            etDate.setText(LocalDate.now().toString())
             prefs.stopwatchStart = 0L
             updateStopwatchLabel()
             openSheet()
@@ -961,6 +971,8 @@ class MainActivity : AppCompatActivity() {
         val e = intent.getStringExtra(TimerReceiver.EXTRA_END)
         if (s != null) etStart.setText(s)
         if (e != null) etEnd.setText(e)
+        // 倒计时到点是真实发生的时间，日期按今天走，不跟着首页正在看的那天走
+        etDate.setText(LocalDate.now().toString())
         prefs.countdownEnd = 0L
         updateCountdownLabel()
         openSheet()
