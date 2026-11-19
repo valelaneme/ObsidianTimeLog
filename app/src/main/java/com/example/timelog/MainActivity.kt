@@ -418,16 +418,63 @@ class MainActivity : AppCompatActivity() {
         return if (entry.endMin == 1440) entry.date else entry.date.minusDays(1)
     }
 
-    private fun openSheet() {
-        inputSheet.visibility = View.VISIBLE
-        sheetDim.visibility = View.VISIBLE
-        updatePreview()
+    // 浮层滑动动画的序号：快速开关时用，防止上一次收起的收尾把新打开的面板又藏掉
+    private var sheetAnimToken = 0
+
+    private fun sheetHeight(): Float {
+        val h = inputSheet.height
+        return if (h > 0) h.toFloat() else resources.displayMetrics.heightPixels * 0.5f
     }
 
+    /**
+     * 打开录入面板：从屏幕下沿滑上来，背景蒙层同时淡入。
+     * 只动 translationY / alpha 两个属性，交给 GPU 合成，和翻日期那次动画一个路子。
+     */
+    private fun openSheet() {
+        sheetAnimToken++
+        inputSheet.animate().cancel()
+        sheetDim.animate().cancel()
+        if (inputSheet.visibility != View.VISIBLE) {
+            inputSheet.translationY = sheetHeight()
+            inputSheet.alpha = 0f
+            sheetDim.alpha = 0f
+            inputSheet.visibility = View.VISIBLE
+            sheetDim.visibility = View.VISIBLE
+        }
+        updatePreview()
+        inputSheet.animate()
+            .translationY(0f)
+            .alpha(1f)
+            .setDuration(220L)
+            .setInterpolator(android.view.animation.DecelerateInterpolator())
+            .start()
+        sheetDim.animate().alpha(1f).setDuration(220L).start()
+    }
+
+    /** 收起录入面板：往下滑回去，背景蒙层淡出；动画结束才真正 GONE。 */
     private fun closeSheet() {
-        inputSheet.visibility = View.GONE
-        sheetDim.visibility = View.GONE
+        if (inputSheet.visibility != View.VISIBLE) return
+        sheetAnimToken++
+        val token = sheetAnimToken
         setEditTarget(null, null)
+        inputSheet.animate().cancel()
+        sheetDim.animate().cancel()
+        inputSheet.animate()
+            .translationY(sheetHeight())
+            .alpha(0f)
+            .setDuration(180L)
+            .setInterpolator(android.view.animation.AccelerateInterpolator())
+            .withEndAction {
+                if (token == sheetAnimToken) {
+                    inputSheet.visibility = View.GONE
+                    sheetDim.visibility = View.GONE
+                    inputSheet.translationY = 0f
+                    inputSheet.alpha = 1f
+                    sheetDim.alpha = 1f
+                }
+            }
+            .start()
+        sheetDim.animate().alpha(0f).setDuration(180L).start()
     }
 
     private var touchStartY = 0f
