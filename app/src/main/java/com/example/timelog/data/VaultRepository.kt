@@ -159,7 +159,7 @@ class VaultRepository(private val context: Context) {
      * 删除一条记录：按解析时保存的原始行精确匹配，只删那一行。
      * 先在当天文件找；跨午夜记录的那一行写在"前一天"文件里，再回退找前一天。
      */
-    fun deleteEntry(date: LocalDate, entry: LogEntry): Result<Int> {
+    fun deleteEntry(date: LocalDate, entry: LogEntry): Result<String> {
         val root = root() ?: return Result.failure(IllegalStateException("还没有选择日记文件夹"))
         for (d in listOf(date, date.minusDays(1))) {
             val fileName = "$d.md"
