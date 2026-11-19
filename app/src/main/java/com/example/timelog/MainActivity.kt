@@ -59,6 +59,10 @@ class MainActivity : AppCompatActivity() {
     private var warnings: List<String> = emptyList()
     // 记住上次用的文件夹：从设置页换文件夹回来时自动刷新，不用手动点刷新
     private var lastTreeUri: String? = null
+    // onResume 与 onCreate 会连着触发，第一次不重复读
+    private var firstResume = true
+    // 上次真正读取的时刻，避免同一瞬间重复读两遍
+    private var lastReloadAt = 0L
 
     // 历史日志里统计出的常用候选（一级/二级分类、双链）
     private var suggestions = Suggestions.EMPTY
@@ -135,15 +139,26 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        // 设置页换了文件夹（包括用系统返回键回来）就自动重新读取，不需要手动刷新
+        // 没有任何「刷新」按钮了，全部自动：
+        // 1) 打开 App → onCreate 里读一次；
+        // 2) 从设置页换了文件夹 → 这里发现 treeUri 变了，重读并重建常用候选；
+        // 3) 从 Obsidian 或别的 App 回来 → 也重读一次，md 里改过的东西立刻能看到。
         val now = repo.treeUri?.toString()
-        if (now != lastTreeUri) {
+        val folderChanged = now != lastTreeUri
+        if (folderChanged) {
             lastTreeUri = now
             suggestions = Suggestions.EMPTY
             refreshFolderLabel()
             reload()
             loadSuggestionsIfNeeded()
+            firstResume = false
+            return
         }
+        if (firstResume) {          // 刚打开，onCreate 已经读过
+            firstResume = false
+            return
+        }
+        reload(force = false)       // 同一文件夹，从后台回来也刷新
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -286,8 +301,14 @@ class MainActivity : AppCompatActivity() {
         tvFolder.text = if (name == null) "未选择文件夹 · 点右侧「设置」选择" else "当前文件夹：$name"
     }
 
-    /** 只读当天，秒开。 */
-    private fun reload() {
+    /**
+     * 只读当天，秒开。
+     * force = false 时，若刚读过（600ms 内）就跳过，避免 onResume 和设置页回调整出两次重复读。
+     */
+    private fun reload(force: Boolean = true) {
+        val now = System.currentTimeMillis()
+        if (!force && now - lastReloadAt < 600) return
+        lastReloadAt = now
         tvFolder.text = "读取中…"
         Thread {
             val result: ParseResult = repo.loadDay(viewDate)
