@@ -25,10 +25,24 @@ class Prefs(context: Context) {
         get() = sp.getString(KEY_LINKS, "").orEmpty()
         set(value) = sp.edit().putString(KEY_LINKS, value).apply()
 
+    /**
+     * 计时状态存"绝对时刻"（毫秒时间戳），不是累加的秒数。
+     * 这样锁屏、切到别的 App、甚至进程被杀后重开，用 当前时刻 - 开始时刻 依然准确。
+     */
+    var stopwatchStart: Long
+        get() = sp.getLong(KEY_STOPWATCH, 0L)
+        set(value) = sp.edit().putLong(KEY_STOPWATCH, value).apply()
+
+    var countdownEnd: Long
+        get() = sp.getLong(KEY_COUNTDOWN_END, 0L)
+        set(value) = sp.edit().putLong(KEY_COUNTDOWN_END, value).apply()
+
     companion object {
         private const val KEY_L1 = "level1"
         private const val KEY_L2 = "level2"
         private const val KEY_TITLE = "title"
         private const val KEY_LINKS = "links"
+        private const val KEY_STOPWATCH = "stopwatch_start"
+        private const val KEY_COUNTDOWN_END = "countdown_end"
     }
 }
