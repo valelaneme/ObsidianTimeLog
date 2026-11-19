@@ -22,7 +22,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="重新读取" />
+            android:text="刷新" />
     </LinearLayout>
 
     <TextView
@@ -58,7 +58,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="分析" />
+            android:text="单日分析" />
     </LinearLayout>
 
     <ScrollView
@@ -72,6 +72,7 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
+            <!-- 录入面板 -->
             <LinearLayout
                 android:id="@+id/panelInput"
                 android:layout_width="match_parent"
@@ -86,19 +87,45 @@
                     android:hint="日期 YYYY-MM-DD"
                     android:inputType="date" />
 
-                <EditText
-                    android:id="@+id/etStart"
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:hint="开始时间 09:00"
-                    android:inputType="text" />
+                    android:orientation="horizontal">
 
-                <EditText
-                    android:id="@+id/etEnd"
+                    <EditText
+                        android:id="@+id/etStart"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:hint="开始 09:00"
+                        android:inputType="time" />
+
+                    <Button
+                        android:id="@+id/btnNowStart"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="现在" />
+                </LinearLayout>
+
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:hint="结束时间 10:30"
-                    android:inputType="text" />
+                    android:orientation="horizontal">
+
+                    <EditText
+                        android:id="@+id/etEnd"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:hint="结束 10:30"
+                        android:inputType="time" />
+
+                    <Button
+                        android:id="@+id/btnNowEnd"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="现在" />
+                </LinearLayout>
 
                 <EditText
                     android:id="@+id/etL1"
@@ -118,7 +145,14 @@
                     android:id="@+id/etTitle"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:hint="事项（如 早餐）"
+                    android:hint="事项（如 早餐，可留空）"
+                    android:inputType="text" />
+
+                <EditText
+                    android:id="@+id/etLinks"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="双链（空格分隔，如 地点 张老师）"
                     android:inputType="text" />
 
                 <EditText
@@ -133,7 +167,7 @@
                     android:id="@+id/btnSave"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="生成并追加到当天 md" />
+                    android:text="追加到当天 md" />
 
                 <TextView
                     android:id="@+id/tvPreview"
@@ -141,10 +175,12 @@
                     android:layout_height="wrap_content"
                     android:paddingTop="8dp"
                     android:text="预览会显示在这里"
+                    android:textIsSelectable="true"
                     android:textSize="12sp"
                     android:typeface="monospace" />
             </LinearLayout>
 
+            <!-- 校验面板 -->
             <LinearLayout
                 android:id="@+id/panelCheck"
                 android:layout_width="match_parent"
@@ -153,22 +189,24 @@
                 android:paddingTop="8dp"
                 android:visibility="gone">
 
-                <Button
-                    android:id="@+id/btnCheck"
+                <TextView
+                    android:id="@+id/tvCheckDate"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="校验时间重叠" />
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
 
                 <TextView
                     android:id="@+id/tvCheck"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:paddingTop="8dp"
-                    android:text="读取后点上面的按钮校验"
+                    android:text="读取后显示当天的重叠"
                     android:textIsSelectable="true"
                     android:textSize="13sp" />
             </LinearLayout>
 
+            <!-- 单日分析面板 -->
             <LinearLayout
                 android:id="@+id/panelStats"
                 android:layout_width="match_parent"
@@ -183,41 +221,22 @@
                     android:orientation="horizontal">
 
                     <Button
-                        android:id="@+id/btnPrev"
+                        android:id="@+id/btnPrevDay"
                         android:layout_width="48dp"
                         android:layout_height="wrap_content"
                         android:text="‹" />
 
-                    <Button
-                        android:id="@+id/pDay"
+                    <TextView
+                        android:id="@+id/tvStatsDate"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="日" />
+                        android:gravity="center"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
 
                     <Button
-                        android:id="@+id/pWeek"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="周" />
-
-                    <Button
-                        android:id="@+id/pMonth"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="月" />
-
-                    <Button
-                        android:id="@+id/pYear"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="年" />
-
-                    <Button
-                        android:id="@+id/btnNext"
+                        android:id="@+id/btnNextDay"
                         android:layout_width="48dp"
                         android:layout_height="wrap_content"
                         android:text="›" />
@@ -228,9 +247,18 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:paddingTop="8dp"
-                    android:text="读取后选择日 / 周 / 月 / 年"
+                    android:text="读取后显示当天统计"
                     android:textIsSelectable="true"
                     android:textSize="13sp" />
+
+                <TextView
+                    android:id="@+id/tvFuture"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingTop="16dp"
+                    android:text="周 / 月 / 年分析将在后续版本加入"
+                    android:textSize="12sp"
+                    android:textStyle="italic" />
             </LinearLayout>
         </LinearLayout>
     </ScrollView>

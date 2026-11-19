@@ -3,6 +3,8 @@ plugins {
     id 'org.jetbrains.kotlin.android'
 }
 
+def ciBuildNumber = System.getenv('BUILD_NUMBER')?.toInteger() ?: 1
+
 android {
     namespace 'com.example.timelog'
     compileSdk 34
@@ -11,8 +13,8 @@ android {
         applicationId 'com.example.timelog'
         minSdk 26
         targetSdk 34
-        versionCode 1
-        versionName '1.0'
+        versionCode ciBuildNumber
+        versionName "1.0.${ciBuildNumber}"
     }
 
     buildTypes {
