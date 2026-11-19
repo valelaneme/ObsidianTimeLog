@@ -249,7 +249,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:scaleType="fitXY"
-                android:visibility="gone" />
+                android:visibility="invisible" />
         </FrameLayout>
 
         <!-- 底部三按钮：单手拇指可及 -->

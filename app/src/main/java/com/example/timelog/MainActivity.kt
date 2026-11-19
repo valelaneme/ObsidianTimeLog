@@ -619,7 +619,10 @@ class MainActivity : AppCompatActivity() {
         contentRoot.animate().cancel()
         slideSnapshot.animate().cancel()
 
-        if (snap != null && slideSnapshot.width > 0) {
+        // 注意：不能用 slideSnapshot.width > 0 当开关——它在动画结束后会被设回 GONE，
+        // GONE 的控件宽度恒为 0，会导致整页滑动分支永远走不到（只走下面的 24dp 兜底）。
+        // 快照能拍到就说明内容区已经布局好了，直接用 snap 是否为空判断即可。
+        if (snap != null) {
             val distance = contentRoot.width.toFloat()
             slideSnapshot.setImageBitmap(snap)
             slideSnapshot.visibility = View.VISIBLE
@@ -631,7 +634,7 @@ class MainActivity : AppCompatActivity() {
                 .setDuration(260L)
                 .setInterpolator(interpolator)
                 .withEndAction {
-                    slideSnapshot.visibility = View.GONE
+                    slideSnapshot.visibility = View.INVISIBLE
                     slideSnapshot.setImageBitmap(null)
                 }
                 .start()
