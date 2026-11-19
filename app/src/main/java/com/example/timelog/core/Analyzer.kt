@@ -28,6 +28,29 @@ object Analyzer {
     }
 
     /**
+     * 当天"真正被记录覆盖"的分钟数：把时间段合并成区间并集，重叠部分只算一次。
+     * 用它算"总记录时间 / 未记录时间"，两者相加才恒等于 24 小时。
+     */
+    fun coveredMinutes(day: List<LogEntry>): Int {
+        val ranges = day
+            .map { it.startMin.coerceIn(0, 1440) to it.endMin.coerceIn(0, 1440) }
+            .filter { it.second > it.first }
+            .sortedBy { it.first }
+        var total = 0
+        var curStart = -1
+        var curEnd = -1
+        ranges.forEach { (s, e) ->
+            when {
+                curStart < 0 -> { curStart = s; curEnd = e }
+                s <= curEnd -> { if (e > curEnd) curEnd = e }
+                else -> { total += curEnd - curStart; curStart = s; curEnd = e }
+            }
+        }
+        if (curStart >= 0) total += curEnd - curStart
+        return total.coerceIn(0, 1440)
+    }
+
+    /**
      * 把某一天的记录算成 DaySummary（数据原子）。
      * 覆盖率分母 = 1 天 × 24h，睡眠计入。
      */

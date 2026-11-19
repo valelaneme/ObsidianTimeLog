@@ -7,7 +7,6 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -22,7 +21,6 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.documentfile.provider.DocumentFile
 import com.example.timelog.core.Analyzer
 import com.example.timelog.core.CategoryStat
 import com.example.timelog.core.DaySummary
@@ -37,6 +35,8 @@ import com.example.timelog.data.VaultRepository
 import com.example.timelog.core.Suggestions
 import com.example.timelog.ui.TimelineView
 import android.graphics.Color
+import android.graphics.Typeface
+import android.view.Gravity
 import android.widget.CheckBox
 import android.widget.LinearLayout
 import java.time.Instant
@@ -57,6 +57,8 @@ class MainActivity : AppCompatActivity() {
     private var viewDate: LocalDate = LocalDate.now()
     private var entries: List<LogEntry> = emptyList()
     private var warnings: List<String> = emptyList()
+    // 记住上次用的文件夹：从设置页换文件夹回来时自动刷新，不用手动点刷新
+    private var lastTreeUri: String? = null
 
     // 历史日志里统计出的常用候选（一级/二级分类、双链）
     private var suggestions = Suggestions.EMPTY
@@ -66,6 +68,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvFolder: TextView
     private lateinit var tvStatsDate: TextView
     private lateinit var tvStats: TextView
+    private lateinit var recordsContainer: LinearLayout
     private lateinit var tvCheck: TextView
     private lateinit var tvPreview: TextView
     private lateinit var timeline: TimelineView
@@ -97,7 +100,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     companion object {
-        private const val REQ_PICK = 42
+        private const val REQ_SETTINGS = 42
         private const val REQ_NOTIF = 43
     }
 
@@ -106,6 +109,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
         repo = VaultRepository(this)
         prefs = Prefs(this)
+        lastTreeUri = repo.treeUri?.toString()
         bindViews()
         setupListeners()
 
@@ -129,6 +133,19 @@ class MainActivity : AppCompatActivity() {
         mainHandler.post(tick)
     }
 
+    override fun onResume() {
+        super.onResume()
+        // 设置页换了文件夹（包括用系统返回键回来）就自动重新读取，不需要手动刷新
+        val now = repo.treeUri?.toString()
+        if (now != lastTreeUri) {
+            lastTreeUri = now
+            suggestions = Suggestions.EMPTY
+            refreshFolderLabel()
+            reload()
+            loadSuggestionsIfNeeded()
+        }
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
@@ -146,6 +163,7 @@ class MainActivity : AppCompatActivity() {
         tvStats = findViewById(R.id.tvStats)
         tvCheck = findViewById(R.id.tvCheck)
         tvPreview = findViewById(R.id.tvPreview)
+        recordsContainer = findViewById(R.id.recordsContainer)
         timeline = findViewById(R.id.timeline)
         etDate = findViewById(R.id.etDate)
         etStart = findViewById(R.id.etStart)
@@ -167,8 +185,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupListeners() {
-        findViewById<Button>(R.id.btnPickFolder).setOnClickListener { openFolderPicker() }
-        findViewById<Button>(R.id.btnReload).setOnClickListener { reload() }
+        findViewById<Button>(R.id.btnSettings).setOnClickListener {
+            @Suppress("DEPRECATION")
+            startActivityForResult(Intent(this, SettingsActivity::class.java), REQ_SETTINGS)
+        }
         findViewById<Button>(R.id.btnPrevDay).setOnClickListener { shiftDate(-1) }
         findViewById<Button>(R.id.btnNextDay).setOnClickListener { shiftDate(1) }
 
@@ -248,31 +268,13 @@ class MainActivity : AppCompatActivity() {
 
     // ---------- 数据读取 ----------
 
-    private fun openFolderPicker() {
-        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
-            addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
-        }
-        @Suppress("DEPRECATION")
-        startActivityForResult(intent, REQ_PICK)
-    }
-
+    /** 从设置页回来：换文件夹、点"重新读取"或按系统返回键，都重新读一次。 */
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == REQ_NOTIF) return
-        if (requestCode != REQ_PICK || resultCode != Activity.RESULT_OK) return
-        val uri: Uri = data?.data ?: return
-        try {
-            contentResolver.takePersistableUriPermission(
-                uri,
-                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-            )
-        } catch (e: Exception) {
-            Toast.makeText(this, "授权未持久化：${e.message}", Toast.LENGTH_SHORT).show()
-        }
-        repo.treeUri = uri
+        if (requestCode != REQ_SETTINGS || resultCode != Activity.RESULT_OK) return
+        lastTreeUri = repo.treeUri?.toString()
         suggestions = Suggestions.EMPTY
         refreshFolderLabel()
         reload()
@@ -280,8 +282,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun refreshFolderLabel() {
-        val root: DocumentFile? = repo.root()
-        tvFolder.text = if (root == null) "未选择文件夹" else "当前文件夹：${root.name ?: "已授权"}"
+        val name = repo.root()?.name
+        tvFolder.text = if (name == null) "未选择文件夹 · 点右侧「设置」选择" else "当前文件夹：$name"
     }
 
     /** 只读当天，秒开。 */
@@ -294,6 +296,7 @@ class MainActivity : AppCompatActivity() {
                 warnings = result.warnings
                 refreshFolderLabel()
                 renderStats()
+                renderRecords()
                 renderCheck(emptyList())
             }
         }.start()
@@ -697,16 +700,23 @@ class MainActivity : AppCompatActivity() {
     // ---------- 显示 ----------
 
     private fun renderStats() {
+        val day = entries.filter { it.date == viewDate }
         val summary: DaySummary = Analyzer.analyzeDay(entries, viewDate)
+        val covered = Analyzer.coveredMinutes(day)
+        val unrecorded = (1440 - covered).coerceAtLeast(0)
         tvStatsDate.text = "$viewDate  单日分析"
         val sb = StringBuilder()
-        sb.append("总记录：").append(Formatters.duration(summary.totalMinutes))
-            .append("（含睡眠）  ").append(summary.entries).append(" 条\n")
-        sb.append("覆盖率：").append(Formatters.percent(summary.coveragePercent))
-            .append("（分母 24 小时）\n")
-        sb.append("重叠：").append(summary.overlaps).append(" 处\n\n")
-
-        sb.append("一级分类\n")
+        sb.append("总记录时间：").append(Formatters.duration(covered)).append("\n")
+        sb.append("未记录时间：").append(Formatters.duration(unrecorded)).append("\n")
+        sb.append("覆盖率：").append(Formatters.percent(covered * 100.0 / 1440.0))
+            .append("（分母 24 小时，重叠不重复计）\n")
+        sb.append("记录：").append(summary.entries).append(" 条　重叠：")
+            .append(summary.overlaps).append(" 处\n")
+        if (summary.totalMinutes > covered) {
+            sb.append("（各条累加 ").append(Formatters.duration(summary.totalMinutes))
+                .append("，重叠部分在上面只算一次）\n")
+        }
+        sb.append("\n一级分类\n")
         appendStats(sb, summary.byLevel1)
         sb.append("\n二级分类\n")
         appendStats(sb, summary.byLevel2)
@@ -716,7 +726,152 @@ class MainActivity : AppCompatActivity() {
             warnings.take(5).forEach { sb.append("  - $it\n") }
         }
         tvStats.text = sb.toString()
-        timeline.setData(entries, viewDate)
+        timeline.setData(day, viewDate)
+    }
+
+    // ---------- 当天全部记录 ----------
+
+    /**
+     * 逐条列出当天所有记录。两条时间不相连时，中间插一个"半行高"的空档，
+     * 高度固定是普通记录行的一半，视觉上一眼就能看出哪段时间漏记了。
+     */
+    private fun renderRecords() {
+        recordsContainer.removeAllViews()
+        val rowHeight = (58f * resources.displayMetrics.density).toInt()
+
+        if (repo.root() == null) {
+            recordsContainer.addView(hintView("还没选择日记文件夹，请点右上角「设置」选择。"))
+            return
+        }
+        val day = entries.filter { it.date == viewDate }
+            .sortedWith(compareBy<LogEntry>({ it.startMin }, { it.endMin }))
+        if (day.isEmpty()) {
+            recordsContainer.addView(hintView("$viewDate 还没有时间记录。"))
+            return
+        }
+        day.forEachIndexed { idx, entry ->
+            if (idx > 0) {
+                val gap = entry.startMin - day[idx - 1].endMin
+                if (gap > 0) recordsContainer.addView(gapView(gap, rowHeight / 2))
+            }
+            recordsContainer.addView(recordRow(entry, rowHeight))
+        }
+        if (warnings.isNotEmpty()) {
+            recordsContainer.addView(hintView("另有 ${warnings.size} 行没能识别为时间记录，详见上方解析提示。"))
+        }
+    }
+
+    private fun hintView(message: String): TextView = TextView(this).apply {
+        text = message
+        textSize = 12f
+        setTextColor(Color.parseColor("#5F6368"))
+        setPadding(0, dp(8), 0, dp(8))
+    }
+
+    /** 半行高的空档：留白为主，中间一行淡灰小字说明空了多久。 */
+    private fun gapView(minutes: Int, height: Int): TextView = TextView(this).apply {
+        text = "· · ·  空 ${Formatters.duration(minutes)}  · · ·"
+        textSize = 11f
+        gravity = Gravity.CENTER
+        setTextColor(Color.parseColor("#9AA0A6"))
+        layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, height
+        )
+    }
+
+    /** 一条记录：左侧色条按一级分类上色，中间时间与内容，右侧删除。 */
+    private fun recordRow(entry: LogEntry, height: Int): View {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setBackgroundColor(Color.parseColor("#F5F7FA"))
+            setPadding(dp(6), dp(4), dp(4), dp(4))
+            minimumHeight = height
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { setMargins(0, 0, 0, dp(3)) }
+        }
+
+        row.addView(View(this).apply {
+            setBackgroundColor(TimelineView.colorFor(entry.level1))
+            layoutParams = LinearLayout.LayoutParams(dp(4), LinearLayout.LayoutParams.MATCH_PARENT)
+        })
+
+        val texts = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            setPadding(dp(8), 0, 0, 0)
+        }
+        texts.addView(TextView(this).apply {
+            text = "${entry.timeRange()}   ${Formatters.duration(entry.minutes)}"
+            textSize = 14f
+            setTypeface(Typeface.DEFAULT, Typeface.BOLD)
+            setTextColor(Color.parseColor("#202124"))
+        })
+        val detail = buildString {
+            append(entry.level1)
+            if (entry.level2.isNotBlank()) append(" / ").append(entry.level2)
+            if (entry.title.isNotBlank()) append(" · ").append(entry.title)
+            if (entry.links.isNotEmpty()) append(" · ").append(entry.links.joinToString(" "))
+            if (entry.note.isNotBlank()) append(" · ").append(entry.note)
+        }
+        texts.addView(TextView(this).apply {
+            text = detail
+            textSize = 12f
+            setTextColor(Color.parseColor("#5F6368"))
+        })
+        row.addView(texts)
+
+        row.addView(Button(this).apply {
+            text = "删除"
+            textSize = 11f
+            isAllCaps = false
+            setPadding(dp(8), 0, dp(8), 0)
+            setBackgroundColor(Color.parseColor("#FCE8E6"))
+            setTextColor(Color.parseColor("#C5221F"))
+            setOnClickListener { confirmDelete(entry) }
+        })
+        return row
+    }
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
+    private fun confirmDelete(entry: LogEntry) {
+        val raw = LogParser.timeOfLine(entry.raw)
+        val crossed = raw != null && raw.second < raw.first
+        val crossMidnightHint = if (crossed) {
+            "\n（这一行是跨午夜记录，会连前一天那一段一起删）"
+        } else ""
+        AlertDialog.Builder(this)
+            .setTitle("删除这条记录？")
+            .setMessage(
+                "${entry.timeRange()}  ${entry.level1} ${entry.title}\n\n" +
+                    "只会从 md 文件里删掉这一行，其它内容不动。$crossMidnightHint"
+            )
+            .setPositiveButton("删除") { _, _ -> doDelete(entry) }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun doDelete(entry: LogEntry) {
+        Thread {
+            val result = repo.deleteEntry(viewDate, entry)
+            mainHandler.post {
+                if (result.isSuccess) {
+                    Toast.makeText(this@MainActivity, "已从 md 删除这一行", Toast.LENGTH_SHORT).show()
+                    reload()
+                    suggestions = Suggestions.EMPTY
+                    loadSuggestionsIfNeeded()
+                } else {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "删除失败：${result.exceptionOrNull()?.message}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }.start()
     }
 
     /** 首页内嵌的重叠显示；保存前校验时传入候选重叠做即时提示。 */

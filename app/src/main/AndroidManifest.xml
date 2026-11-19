@@ -23,6 +23,11 @@
             </intent-filter>
         </activity>
 
+        <!-- 设置页：选择日记文件夹、重新读取、清除授权 -->
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="false" />
+
         <!-- 倒计时到点的闹钟接收器 -->
         <receiver
             android:name=".TimerReceiver"

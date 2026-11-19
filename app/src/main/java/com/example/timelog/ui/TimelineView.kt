@@ -45,18 +45,6 @@ class TimelineView @JvmOverloads constructor(
         color = Color.parseColor("#1A73E8")
     }
 
-    // 浅色主题下清晰可辨的一组分类色
-    private val palette = intArrayOf(
-        Color.parseColor("#5B8FF9"),
-        Color.parseColor("#61DDAA"),
-        Color.parseColor("#F6BD16"),
-        Color.parseColor("#7262FD"),
-        Color.parseColor("#78D3F8"),
-        Color.parseColor("#E8684A"),
-        Color.parseColor("#9661BC"),
-        Color.parseColor("#65789B")
-    )
-
     init {
         val density = resources.displayMetrics.density
         labelPaint.textSize = 11f * density
@@ -115,9 +103,23 @@ class TimelineView @JvmOverloads constructor(
         }
     }
 
-    /** 同一个一级分类永远同一种颜色。 */
-    private fun colorFor(level1: String): Int {
-        val hash = level1.hashCode() and Int.MAX_VALUE
-        return palette[hash % palette.size]
+    companion object {
+        // 浅色主题下清晰可辨的一组分类色；记录列表左侧色条也复用它
+        private val palette = intArrayOf(
+            Color.parseColor("#5B8FF9"),
+            Color.parseColor("#61DDAA"),
+            Color.parseColor("#F6BD16"),
+            Color.parseColor("#7262FD"),
+            Color.parseColor("#78D3F8"),
+            Color.parseColor("#E8684A"),
+            Color.parseColor("#9661BC"),
+            Color.parseColor("#65789B")
+        )
+
+        /** 同一个一级分类永远同一种颜色，时间轴与记录列表口径一致。 */
+        fun colorFor(level1: String): Int {
+            val hash = level1.hashCode() and Int.MAX_VALUE
+            return palette[hash % palette.size]
+        }
     }
 }

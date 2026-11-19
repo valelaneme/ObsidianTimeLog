@@ -13,6 +13,22 @@ object LogParser {
     private val LINK_RE = Regex("""\[\[([^\]]+)\]\]""")
     private val FILE_DATE_RE = Regex("""(\d{4}-\d{2}-\d{2})""")
 
+    /**
+     * 从一行 md 里读出 (开始分钟, 结束分钟)；不是记录行返回 null。
+     * 写入时用它判断"哪些行是时间记录"并按时间排序，与解析共用同一套正则和校验口径。
+     */
+    fun timeOfLine(raw: String): Pair<Int, Int>? {
+        if (TASK_RE.find(raw) == null) return null
+        val m = TIME_RE.find(raw) ?: return null
+        val sh = m.groupValues[1].toIntOrNull() ?: return null
+        val sm = m.groupValues[2].toIntOrNull() ?: return null
+        val eh = m.groupValues[3].toIntOrNull() ?: return null
+        val em = m.groupValues[4].toIntOrNull() ?: return null
+        if (sh !in 0..24 || eh !in 0..24 || sm !in 0..59 || em !in 0..59 ||
+            (sh == 24 && sm != 0) || (eh == 24 && em != 0)) return null
+        return (sh * 60 + sm) to (eh * 60 + em)
+    }
+
     fun parseFile(fileName: String, text: String): ParseResult {
         val dateMatch = FILE_DATE_RE.find(fileName)
         if (dateMatch == null) {
