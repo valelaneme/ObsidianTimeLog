@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
+import com.example.timelog.data.Prefs
 
 /**
  * 倒计时到点：系统闹钟唤起它，弹一条通知。
@@ -20,6 +21,9 @@ class TimerReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val startHm = intent.getStringExtra(EXTRA_START) ?: return
         val endHm = intent.getStringExtra(EXTRA_END) ?: return
+
+        // 到点了就清掉过期状态；否则App重开时按钮可能还显示"剩 X 分"
+        Prefs(context).countdownEnd = 0L
 
         val open = Intent(context, MainActivity::class.java).apply {
             putExtra(EXTRA_START, startHm)

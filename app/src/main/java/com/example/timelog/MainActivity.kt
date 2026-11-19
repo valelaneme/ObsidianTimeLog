@@ -34,6 +34,11 @@ import com.example.timelog.core.Overlap
 import com.example.timelog.core.ParseResult
 import com.example.timelog.data.Prefs
 import com.example.timelog.data.VaultRepository
+import com.example.timelog.core.Suggestions
+import com.example.timelog.ui.TimelineView
+import android.graphics.Color
+import android.widget.CheckBox
+import android.widget.LinearLayout
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -53,12 +58,17 @@ class MainActivity : AppCompatActivity() {
     private var entries: List<LogEntry> = emptyList()
     private var warnings: List<String> = emptyList()
 
+    // 历史日志里统计出的常用候选（一级/二级分类、双链）
+    private var suggestions = Suggestions.EMPTY
+    private var suggestionsLoading = false
+
     // 视图
     private lateinit var tvFolder: TextView
     private lateinit var tvStatsDate: TextView
     private lateinit var tvStats: TextView
     private lateinit var tvCheck: TextView
     private lateinit var tvPreview: TextView
+    private lateinit var timeline: TimelineView
     private lateinit var etDate: EditText
     private lateinit var etStart: EditText
     private lateinit var etEnd: EditText
@@ -67,6 +77,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var etTitle: EditText
     private lateinit var etLinks: EditText
     private lateinit var etNote: EditText
+    private lateinit var l1CandidatesRow: LinearLayout
+    private lateinit var l2CandidatesRow: LinearLayout
+    private lateinit var linkCandidatesRow: LinearLayout
+    private lateinit var cbContinue: CheckBox
     private lateinit var inputSheet: View
     private lateinit var sheetDim: View
     private lateinit var sheetHandle: View
@@ -104,9 +118,14 @@ class MainActivity : AppCompatActivity() {
         limitSheetHeight()      // 录入浮层最多半屏
         requestNotifPermission()
         handleTimerIntent(intent)   // 通知点开时回填时间段
+        // 倒计时到点后如果没点通知，过期状态别一直留着
+        if (prefs.countdownEnd > 0L && prefs.countdownEnd <= System.currentTimeMillis()) {
+            prefs.countdownEnd = 0L
+        }
         refreshFolderLabel()
         updatePreview()
         reload()
+        loadSuggestionsIfNeeded()
         mainHandler.post(tick)
     }
 
@@ -127,6 +146,7 @@ class MainActivity : AppCompatActivity() {
         tvStats = findViewById(R.id.tvStats)
         tvCheck = findViewById(R.id.tvCheck)
         tvPreview = findViewById(R.id.tvPreview)
+        timeline = findViewById(R.id.timeline)
         etDate = findViewById(R.id.etDate)
         etStart = findViewById(R.id.etStart)
         etEnd = findViewById(R.id.etEnd)
@@ -135,6 +155,10 @@ class MainActivity : AppCompatActivity() {
         etTitle = findViewById(R.id.etTitle)
         etLinks = findViewById(R.id.etLinks)
         etNote = findViewById(R.id.etNote)
+        l1CandidatesRow = findViewById(R.id.l1CandidatesRow)
+        l2CandidatesRow = findViewById(R.id.l2CandidatesRow)
+        linkCandidatesRow = findViewById(R.id.linkCandidatesRow)
+        cbContinue = findViewById(R.id.cbContinue)
         inputSheet = findViewById(R.id.inputSheet)
         sheetDim = findViewById(R.id.sheetDim)
         sheetHandle = findViewById(R.id.sheetHandle)
@@ -158,9 +182,23 @@ class MainActivity : AppCompatActivity() {
         sheetDim.setOnClickListener { closeSheet() }
         sheetHandle.setOnTouchListener { v, event -> onHandleTouch(v, event) }
 
-        // 录入控件
+        // 日期快捷
+        findViewById<Button>(R.id.btnToday).setOnClickListener {
+            etDate.setText(LocalDate.now().toString())
+        }
+        findViewById<Button>(R.id.btnGoDate).setOnClickListener { goToTypedDate() }
+
+        // 录入控件：时间一键填，少打字
         findViewById<Button>(R.id.btnNowStart).setOnClickListener { etStart.setText(nowHm()) }
         findViewById<Button>(R.id.btnNowEnd).setOnClickListener { etEnd.setText(nowHm()) }
+        findViewById<Button>(R.id.btnRoundStart).setOnClickListener { etStart.setText(LogEntry.fmt(nowHourStart())) }
+        findViewById<Button>(R.id.btnRoundEnd).setOnClickListener { etEnd.setText(LogEntry.fmt(nowHourEnd())) }
+        findViewById<Button>(R.id.btnHalfEnd).setOnClickListener { etEnd.setText(LogEntry.fmt(nowHalfEnd())) }
+        findViewById<Button>(R.id.btnClearTime).setOnClickListener {
+            etStart.text.clear()
+            etEnd.text.clear()
+            updatePreview()
+        }
         findViewById<Button>(R.id.btnSave).setOnClickListener { onSaveClick() }
 
         val watcher = object : TextWatcher {
@@ -235,8 +273,10 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "授权未持久化：${e.message}", Toast.LENGTH_SHORT).show()
         }
         repo.treeUri = uri
+        suggestions = Suggestions.EMPTY
         refreshFolderLabel()
         reload()
+        loadSuggestionsIfNeeded()
     }
 
     private fun refreshFolderLabel() {
@@ -263,6 +303,114 @@ class MainActivity : AppCompatActivity() {
         viewDate = viewDate.plusDays(delta.toLong())
         etDate.setText(viewDate.toString())
         reload()
+    }
+
+    /** 手改日期后点"查看"：让首页统计跟着输入的日期走，避免看的是 A 天、存的是 B 天。 */
+    private fun goToTypedDate() {
+        val date = try {
+            LocalDate.parse(etDate.text.toString().trim())
+        } catch (e: Exception) {
+            null
+        }
+        if (date == null) {
+            Toast.makeText(this, "日期请写成 2026-11-19 这种格式", Toast.LENGTH_SHORT).show()
+            return
+        }
+        viewDate = date
+        etDate.setText(date.toString())
+        reload()
+        Toast.makeText(this, "已切到 $date", Toast.LENGTH_SHORT).show()
+    }
+
+    // ---------- 快捷时间 ----------
+
+    private fun nowMinuteOfDay(): Int {
+        val now = LocalDateTime.now()
+        return now.hour * 60 + now.minute
+    }
+
+    private fun nowHourStart(): Int = (nowMinuteOfDay() / 60) * 60
+
+    private fun nowHourEnd(): Int {
+        val m = nowMinuteOfDay()
+        return if (m % 60 == 0) m else (m / 60 + 1) * 60
+    }
+
+    private fun nowHalfEnd(): Int = (nowMinuteOfDay() / 30 + 1) * 30
+
+    // ---------- 常用候选一键选 ----------
+
+    /** 后台扫历史日志；只在第一次打开或换文件夹后扫，之后用内存里的结果。 */
+    private fun loadSuggestionsIfNeeded() {
+        if (suggestionsLoading || repo.root() == null) return
+        if (suggestions != Suggestions.EMPTY) {
+            renderSuggestions()
+            return
+        }
+        suggestionsLoading = true
+        Thread {
+            val result = repo.loadSuggestions()
+            mainHandler.post {
+                suggestions = result
+                suggestionsLoading = false
+                renderSuggestions()
+            }
+        }.start()
+    }
+
+    private fun renderSuggestions() {
+        renderCandidateRow(l1CandidatesRow, suggestions.level1, etL1, false)
+        renderCandidateRow(l2CandidatesRow, suggestions.level2, etL2, false)
+        renderCandidateRow(linkCandidatesRow, suggestions.links, etLinks, true)
+    }
+
+    private fun renderCandidateRow(
+        row: LinearLayout,
+        values: List<String>,
+        target: EditText,
+        isLink: Boolean
+    ) {
+        row.removeAllViews()
+        if (values.isEmpty()) return
+        row.addView(TextView(this).apply {
+            text = "常用："
+            textSize = 12f
+            setTextColor(Color.parseColor("#5F6368"))
+        })
+        values.forEach { value ->
+            val chip = Button(this).apply {
+                text = value
+                textSize = 11f
+                isAllCaps = false
+                setPadding(10, 2, 10, 2)
+                setBackgroundColor(Color.parseColor("#E8F0FE"))
+                setTextColor(Color.parseColor("#1967D2"))
+            }
+            chip.setOnClickListener { applyCandidate(target, value, isLink) }
+            row.addView(
+                chip,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { setMargins(0, 0, 8, 0) }
+            )
+        }
+    }
+
+    /** 分类=直接填入；双链=点一下添加、再点一下移除。 */
+    private fun applyCandidate(target: EditText, value: String, isLink: Boolean) {
+        if (!isLink) {
+            target.setText(value)
+            target.setSelection(value.length)
+        } else {
+            val current = target.text.toString().trim()
+                .split(Regex("""\s+""")).filter { it.isNotEmpty() }.toMutableList()
+            if (current.contains(value)) current.remove(value) else current.add(value)
+            val joined = current.joinToString(" ")
+            target.setText(joined)
+            target.setSelection(joined.length)
+        }
+        updatePreview()
     }
 
     // ---------- 录入 + 保存前校验 ----------
@@ -325,24 +473,41 @@ class MainActivity : AppCompatActivity() {
         LogFormatter.build(input).forEach { (date, line) ->
             candidates.addAll(LogParser.parseLine(line, date).entries)
         }
-
-        // 找出"涉及新记录"的重叠
-        val all = entries + candidates
-        val mine = Analyzer.overlaps(all).filter { o ->
-            candidates.any { c -> c === o.first || c === o.second }
+        if (candidates.isEmpty()) {
+            Toast.makeText(this, "这段时间长度为 0，不用记", Toast.LENGTH_SHORT).show()
+            return
         }
 
-        if (mine.isNotEmpty()) {
-            AlertDialog.Builder(this)
-                .setTitle("时间重叠，建议修改")
-                .setMessage(describeOverlaps(mine))
-                .setPositiveButton("返回修改时间", null)
-                .setNegativeButton("仍然保存") { _, _ -> doSave(input) }
-                .show()
-        } else {
-            doSave(input)
-        }
+        // 跨午夜时还要补读"次日"文件，否则次日那段会漏检重叠
+        Thread {
+            val extra = mutableListOf<LogEntry>()
+            candidates.map { it.date }.distinct()
+                .filter { it != viewDate }
+                .forEach { extra.addAll(repo.loadExactDay(it)) }
+
+            val all = entries + candidates + extra
+            val mine = Analyzer.overlaps(all).filter { o ->
+                candidates.any { c -> sameEntry(c, o.first) || sameEntry(c, o.second) }
+            }
+            mainHandler.post {
+                if (mine.isNotEmpty()) {
+                    AlertDialog.Builder(this@MainActivity)
+                        .setTitle("时间重叠，建议修改")
+                        .setMessage(describeOverlaps(mine))
+                        .setPositiveButton("返回修改时间", null)
+                        .setNegativeButton("仍然保存") { _, _ -> doSave(input) }
+                        .show()
+                } else {
+                    doSave(input)
+                }
+            }
+        }.start()
     }
+
+    /** 按内容比对，而不是靠对象引用，避免跨线程/重建列表后漏判。 */
+    private fun sameEntry(a: LogEntry, b: LogEntry): Boolean =
+        a.date == b.date && a.startMin == b.startMin && a.endMin == b.endMin &&
+            a.level1 == b.level1 && a.level2 == b.level2 && a.title == b.title && a.raw == b.raw
 
     private fun describeOverlaps(list: List<Overlap>): String {
         val sb = StringBuilder("新增的时间段与已有记录重叠 ${list.size} 处：\n\n")
@@ -364,11 +529,35 @@ class MainActivity : AppCompatActivity() {
         if (result.isSuccess) {
             Toast.makeText(this, "已追加 ${result.getOrNull() ?: 0} 行到 md", Toast.LENGTH_SHORT).show()
             etNote.text.clear()
-            etStart.text.clear()
-            etEnd.text.clear()
-            viewDate = input.date
-            closeSheet()
+
+            val crossed = input.endMin < input.startMin
+            val nextDay = when {
+                crossed || input.endMin >= 1440 -> input.date.plusDays(1)
+                else -> input.date
+            }
+            val nextStart = when {
+                crossed -> input.endMin          // 跨午夜：次日那段从 00:xx 接上
+                input.endMin >= 1440 -> 0
+                else -> input.endMin
+            }
+
+            if (cbContinue.isChecked) {
+                etDate.setText(nextDay.toString())
+                etStart.setText(LogEntry.fmt(nextStart))
+                etEnd.text.clear()
+                viewDate = nextDay
+                openSheet()
+                Toast.makeText(this, "开始时间已接上一段，继续填", Toast.LENGTH_SHORT).show()
+            } else {
+                etStart.text.clear()
+                etEnd.text.clear()
+                viewDate = input.date
+                closeSheet()
+            }
             reload()
+            // 新输入可能带来新名字，候选列表后台刷新一次
+            suggestions = Suggestions.EMPTY
+            loadSuggestionsIfNeeded()
         } else {
             Toast.makeText(this, "写入失败：${result.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
         }
@@ -527,6 +716,7 @@ class MainActivity : AppCompatActivity() {
             warnings.take(5).forEach { sb.append("  - $it\n") }
         }
         tvStats.text = sb.toString()
+        timeline.setData(entries, viewDate)
     }
 
     /** 首页内嵌的重叠显示；保存前校验时传入候选重叠做即时提示。 */

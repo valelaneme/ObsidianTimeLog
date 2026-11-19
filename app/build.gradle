@@ -11,6 +11,20 @@ def sdf = new java.text.SimpleDateFormat('yyyyMMdd.HHmm')
 sdf.setTimeZone(TimeZone.getTimeZone('Asia/Shanghai'))
 def ciBuildName = sdf.format(new Date(buildStamp))
 
+// ---- 正式签名 ----
+// GitHub 仓库里已存 4 个 Secrets：KEYSTORE_BASE64 / KEYSTORE_PASSWORD / KEY_ALIAS / KEY_PASSWORD。
+// workflow 会把 BASE64 解码成临时 keystore 文件，并把 4 个值作为环境变量传进来。
+// 四项齐全才用你自己的密钥签名；缺任意一项就回退到系统默认调试签名，
+// 保证换电脑、本地编译、Secret 临时没配时，依然能编出可安装的 APK。
+def ksFile = System.getenv('KEYSTORE_FILE')
+def ksPassword = System.getenv('KEYSTORE_PASSWORD')
+def keyAlias = System.getenv('KEY_ALIAS')
+def keyPassword = System.getenv('KEY_PASSWORD')
+def hasSigning = ksFile && ksPassword && keyAlias && keyPassword && file(ksFile).exists()
+println(hasSigning
+    ? "TimeLog: 使用正式签名 -> $ksFile"
+    : 'TimeLog: 未检测到签名配置，回退默认调试签名')
+
 android {
     namespace 'com.example.timelog'
     compileSdk 34
@@ -23,8 +37,25 @@ android {
         versionName "1.0.${ciBuildName}"
     }
 
+    // 只在拿到完整签名信息时才创建；名字叫 release，但 debug/release 两个构建都用它，
+    // 这样无论跑哪个 assemble，签名都稳定一致，不会每次换钥匙。
+    signingConfigs {
+        if (hasSigning) {
+            release {
+                storeFile file(ksFile)
+                storePassword ksPassword
+                keyAlias keyAlias
+                keyPassword keyPassword
+            }
+        }
+    }
+
     buildTypes {
+        debug {
+            if (hasSigning) signingConfig signingConfigs.release
+        }
         release {
+            if (hasSigning) signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }

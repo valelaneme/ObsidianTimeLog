@@ -4,3 +4,6 @@ local.properties
 .idea/
 *.iml
 .DS_Store
+# 签名密钥绝不进仓库（云端编译用 GitHub Secrets 解码到临时目录）
+*.jks
+*.keystore

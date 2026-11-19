@@ -7,6 +7,7 @@ import com.example.timelog.core.LogEntry
 import com.example.timelog.core.LogFormatter
 import com.example.timelog.core.LogParser
 import com.example.timelog.core.ParseResult
+import com.example.timelog.core.Suggestions
 import java.time.LocalDate
 
 class VaultRepository(private val context: Context) {
@@ -41,6 +42,52 @@ class VaultRepository(private val context: Context) {
             warnings.addAll(result.warnings)
         }
         return ParseResult(entries.sortedBy { it.startMin }, warnings)
+    }
+
+    /** 只读指定日期这同一个文件，用于跨午夜录入时补查"次日"是否已有重叠记录。 */
+    fun loadExactDay(date: LocalDate): List<LogEntry> {
+        val root = root() ?: return emptyList()
+        val file = root.findFile("$date.md") ?: return emptyList()
+        val text = readText(file) ?: return emptyList()
+        return LogParser.parseFile(file.name ?: "$date.md", text).entries.filter { it.date == date }
+    }
+
+    /**
+     * 统计常用候选：扫日记根目录第一层的 md（最多最近 365 个，按文件名倒序）。
+     * 一级/二级分类取解析结果，双链取 [[...]] 里除分类外的标签。
+     * 只读不写，给录入浮层做"一键点选"，避免每次手打名字。
+     */
+    fun loadSuggestions(): Suggestions {
+        val root = root() ?: return Suggestions.EMPTY
+        val l1 = mutableMapOf<String, Int>()
+        val l2 = mutableMapOf<String, Int>()
+        val links = mutableMapOf<String, Int>()
+
+        root.listFiles()
+            .filter { it.isFile && it.name?.endsWith(".md") == true }
+            .sortedByDescending { it.name.orEmpty() }
+            .take(365)
+            .forEach { file ->
+                val text = readText(file) ?: return@forEach
+                LogParser.parseFile(file.name.orEmpty(), text).entries.forEach { e ->
+                    if (e.level1.isNotBlank() && e.level1 != "未分类") {
+                        l1[e.level1] = (l1[e.level1] ?: 0) + 1
+                    }
+                    if (e.level2.isNotBlank()) {
+                        l2[e.level2] = (l2[e.level2] ?: 0) + 1
+                    }
+                    e.links.forEach { link ->
+                        if (link.isNotBlank()) links[link] = (links[link] ?: 0) + 1
+                    }
+                }
+            }
+
+        fun top(map: Map<String, Int>): List<String> = map.toList()
+            .sortedWith(compareByDescending<Pair<String, Int>> { it.second }.thenBy { it.first })
+            .take(10)
+            .map { it.first }
+
+        return Suggestions(top(l1), top(l2), top(links))
     }
 
     /**

@@ -92,6 +92,20 @@ data class DaySummary(
     }
 }
 
+/**
+ * 从历史日志里统计出来的"常用候选"，用于录入时一键点选。
+ * 三个列表都已按出现次数从多到少排好，并只取前若干名。
+ */
+data class Suggestions(
+    val level1: List<String>,
+    val level2: List<String>,
+    val links: List<String>
+) {
+    companion object {
+        val EMPTY = Suggestions(emptyList(), emptyList(), emptyList())
+    }
+}
+
 object Formatters {
     fun duration(minutes: Int): String {
         val h = minutes / 60

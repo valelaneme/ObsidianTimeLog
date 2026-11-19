@@ -76,6 +76,22 @@
                         android:text="›" />
                 </LinearLayout>
 
+                <!-- 24 小时时间轴：颜色=一级分类，红条=重叠，灰底=空白，蓝线=现在 -->
+                <com.example.timelog.ui.TimelineView
+                    android:id="@+id/timeline"
+                    android:layout_width="match_parent"
+                    android:layout_height="76dp"
+                    android:layout_marginTop="6dp"
+                    android:contentDescription="当天时间轴" />
+
+                <TextView
+                    android:id="@+id/tvTimelineLegend"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingBottom="2dp"
+                    android:text="颜色＝一级分类　红条＝重叠　灰底＝未记录　蓝线＝现在"
+                    android:textSize="11sp" />
+
                 <TextView
                     android:id="@+id/tvStats"
                     android:layout_width="match_parent"
@@ -191,12 +207,31 @@
                 android:paddingEnd="16dp"
                 android:paddingBottom="16dp">
 
-                <EditText
-                    android:id="@+id/etDate"
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:hint="日期 YYYY-MM-DD"
-                    android:inputType="date" />
+                    android:orientation="horizontal">
+
+                    <EditText
+                        android:id="@+id/etDate"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:hint="日期 YYYY-MM-DD"
+                        android:inputType="date" />
+
+                    <Button
+                        android:id="@+id/btnToday"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="今天" />
+
+                    <Button
+                        android:id="@+id/btnGoDate"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="查看" />
+                </LinearLayout>
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -232,6 +267,45 @@
                         android:text="现在" />
                 </LinearLayout>
 
+                <!-- 快捷时间：手打最少 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <Button
+                        android:id="@+id/btnRoundStart"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="开始整点"
+                        android:textSize="11sp" />
+
+                    <Button
+                        android:id="@+id/btnRoundEnd"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="结束整点"
+                        android:textSize="11sp" />
+
+                    <Button
+                        android:id="@+id/btnHalfEnd"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="结束半点"
+                        android:textSize="11sp" />
+
+                    <Button
+                        android:id="@+id/btnClearTime"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="清空"
+                        android:textSize="11sp" />
+                </LinearLayout>
+
                 <EditText
                     android:id="@+id/etL1"
                     android:layout_width="match_parent"
@@ -239,12 +313,36 @@
                     android:hint="一级分类（如 家务）"
                     android:inputType="text" />
 
+                <HorizontalScrollView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:scrollbars="none">
+
+                    <LinearLayout
+                        android:id="@+id/l1CandidatesRow"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal" />
+                </HorizontalScrollView>
+
                 <EditText
                     android:id="@+id/etL2"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:hint="二级分类（如 做饭，可留空）"
                     android:inputType="text" />
+
+                <HorizontalScrollView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:scrollbars="none">
+
+                    <LinearLayout
+                        android:id="@+id/l2CandidatesRow"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal" />
+                </HorizontalScrollView>
 
                 <EditText
                     android:id="@+id/etTitle"
@@ -260,6 +358,18 @@
                     android:hint="双链（空格分隔，如 地点 张老师）"
                     android:inputType="text" />
 
+                <HorizontalScrollView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:scrollbars="none">
+
+                    <LinearLayout
+                        android:id="@+id/linkCandidatesRow"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal" />
+                </HorizontalScrollView>
+
                 <EditText
                     android:id="@+id/etNote"
                     android:layout_width="match_parent"
@@ -273,6 +383,13 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="校验并追加到当天 md" />
+
+                <CheckBox
+                    android:id="@+id/cbContinue"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="保存后继续录下一段（开始时间接上一段）"
+                    android:textSize="12sp" />
 
                 <TextView
                     android:id="@+id/tvPreview"
