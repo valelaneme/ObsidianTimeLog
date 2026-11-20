@@ -634,7 +634,7 @@ class MainActivity : AppCompatActivity() {
                 renderStats()
                 renderRecords()
                 renderCheck(emptyList())
-                renderNeighbor()
+                renderNeighbor(neighborDir)
                 animateContentIn()
             }
         }.start()
@@ -1169,7 +1169,7 @@ class MainActivity : AppCompatActivity() {
      * 把相邻那天的数据填进底层预览页（左右滑动时从侧边露出来的那一页）。
      * dir = 1 显示后一天，-1 显示前一天。只是静态预览，供滑动时看个大概，不参与录入。
      */
-    private fun renderNeighbor(dir: Int) {
+    private fun renderNeighbor(dir: Int = neighborDir) {
         val date = viewDate.plusDays(dir.toLong())
         val day = if (dir > 0) nextDayEntries else prevDayEntries
         tvNeighborDate.text = "录入日期：$date"
@@ -1204,7 +1204,7 @@ class MainActivity : AppCompatActivity() {
         tvLevel1.text = if (level1.isEmpty()) {
             "一级分类：暂无"
         } else {
-            "一级分类：" + level1.joinToString("　") {
+            "一级分类：" + level1.joinToString(" ") {
                 "${it.label} ${Formatters.duration(it.minutes)} ${Formatters.percent(it.percent)}"
             }
         }
@@ -1359,7 +1359,7 @@ class MainActivity : AppCompatActivity() {
             text = buildString {
                 append(entry.timeRange())
                 append(" ").append(Formatters.duration(entry.minutes))
-                if (entry.level1.isNotBlank()) append("　").append(entry.level1)
+                if (entry.level1.isNotBlank()) append(" ").append(entry.level1)
                 if (entry.level2.isNotBlank()) append("/").append(entry.level2)
                 if (entry.title.isNotBlank()) append(" ").append(entry.title)
                 if (entry.links.isNotEmpty()) append(" ").append(entry.links.joinToString(" "))
