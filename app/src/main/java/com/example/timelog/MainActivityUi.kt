@@ -63,6 +63,7 @@ fun MainActivity.limitSheetHeight() {
 fun MainActivity.openNewSheet() {
         setEditTarget(null, null)
         etDate.setText(viewDate.toString())
+        etEndDate.setText(viewDate.toString())
         openSheet()
     }
 
@@ -77,7 +78,9 @@ fun MainActivity.openEditSheet(entry: LogEntry) {
         LogParser.timeOfLine(entry.raw)?.let { (start, end) ->
             etStart.setText(LogEntry.fmt(start))
             etEnd.setText(LogEntry.fmt(end))
-        }
+            // 原始行是跨午夜写法（结束时刻≤开始时刻）时，结束日期是次日
+            etEndDate.setText((if (end <= start) fileDate.plusDays(1) else fileDate).toString())
+        } ?: etEndDate.setText(fileDate.toString())
         etL1.setText(entry.level1)
         etL2.setText(entry.level2)
         etTitle.setText(entry.title)
@@ -94,12 +97,12 @@ fun MainActivity.openProblemSheet(problem: ProblemLine) {
         clearEditTarget()
         editingRaw = problem.raw
         editingRawDate = problem.date
-        tvSheetTitle.text = "修正第${problem.lineNo}行：${problem.reason}"
         btnSave.text = "保存修正"
         btnSheetDelete.visibility = View.VISIBLE
 
         val fill = LogParser.partial(problem.raw)
         etDate.setText(problem.date.toString())
+        etEndDate.setText(problem.date.toString())
         etStart.setText(fill.startHm)
         etEnd.setText(fill.endHm)
         etL1.setText(fill.level1)
@@ -115,11 +118,6 @@ fun MainActivity.setEditTarget(entry: LogEntry?, fileDate: LocalDate?) {
         clearEditTarget()
         editing = entry
         editingFileDate = fileDate
-        tvSheetTitle.text = if (entry != null) {
-            "编辑记录（点「返回」退出）"
-        } else {
-            "录入（下滑或点「返回」退出）"
-        }
         btnSave.text = if (entry != null) "保存修改" else "校验并追加到当天 md"
         btnSheetDelete.visibility = if (entry != null) View.VISIBLE else View.GONE
     }
@@ -241,18 +239,13 @@ fun MainActivity.renderCandidateRow(
     ) {
         row.removeAllViews()
         if (values.isEmpty()) return
-        row.addView(TextView(this).apply {
-            text = "常用："
-            textSize = 12f
-            setTextColor(Color.parseColor("#5F6368"))
-        })
         values.forEach { value ->
             val chip = Button(this).apply {
                 text = value
                 textSize = 11f
                 isAllCaps = false
-                setPadding(10, 2, 10, 2)
-                setBackgroundColor(Color.parseColor("#E8F0FE"))
+                setPadding(14, 4, 14, 4)
+                setBackgroundResource(R.drawable.bg_chip_pill)
                 setTextColor(Color.parseColor("#1967D2"))
             }
             chip.setOnClickListener { applyCandidate(target, value, isLink) }
@@ -300,10 +293,16 @@ fun MainActivity.buildInput(): LogFormatter.Input? {
         } catch (e: Exception) {
             return null
         }
+        val endDate = try {
+            LocalDate.parse(etEndDate.text.toString().trim())
+        } catch (e: Exception) {
+            date
+        }
         val links = etLinks.text.toString().trim()
             .split(Regex("""\s+""")).filter { it.isNotEmpty() }
         return LogFormatter.Input(
             date = date,
+            endDate = endDate,
             startMin = start,
             endMin = end,
             level1 = etL1.text.toString().trim(),
@@ -317,7 +316,7 @@ fun MainActivity.buildInput(): LogFormatter.Input? {
 fun MainActivity.updatePreview() {
         val input = buildInput()
         if (input == null) {
-            tvPreview.text = "时间格式请写成 09:00，日期 2026-11-19"
+            tvPreview.text = "请点选开始/结束日期与时间，填好分类即可保存"
             return
         }
         val lines = LogFormatter.build(input)
@@ -436,7 +435,7 @@ fun MainActivity.doSave(input: LogFormatter.Input) {
         Toast.makeText(this, "已追加 ${result.getOrNull() ?: 0} 行到 md", Toast.LENGTH_SHORT).show()
         etNote.text.clear()
 
-        val crossed = input.endMin < input.startMin
+        val crossed = input.endDate.isAfter(input.date) || input.endMin < input.startMin
         val nextDay = when {
             crossed || input.endMin >= 1440 -> input.date.plusDays(1)
             else -> input.date
@@ -449,6 +448,7 @@ fun MainActivity.doSave(input: LogFormatter.Input) {
 
         if (cbContinue.isChecked) {
             etDate.setText(nextDay.toString())
+            etEndDate.setText(nextDay.toString())
             etStart.setText(LogEntry.fmt(nextStart))
             etEnd.text.clear()
             viewDate = nextDay
@@ -477,7 +477,9 @@ fun MainActivity.onStopwatchClick() {
             etStart.setText(hm(start))
             etEnd.setText(hm(endMs))
             // 计时是真实发生的，日期按今天走，不跟着首页正在看的那天走
-            etDate.setText(LocalDate.now().toString())
+            val today = LocalDate.now()
+            etDate.setText(today.toString())
+            etEndDate.setText((if (parseTime(hm(endMs))!! <= parseTime(hm(start))!!) today.plusDays(1) else today).toString())
             prefs.stopwatchStart = 0L
             updateStopwatchLabel()
             openSheet()
@@ -585,7 +587,10 @@ fun MainActivity.handleTimerIntent(intent: Intent) {
         if (s != null) etStart.setText(s)
         if (e != null) etEnd.setText(e)
         // 倒计时到点是真实发生的时间，日期按今天走，不跟着首页正在看的那天走
-        etDate.setText(LocalDate.now().toString())
+        val today = LocalDate.now()
+        etDate.setText(today.toString())
+        val cross = s != null && e != null && parseTime(e) != null && parseTime(s) != null && parseTime(e)!! <= parseTime(s)!!
+        etEndDate.setText((if (cross) today.plusDays(1) else today).toString())
         prefs.countdownEnd = 0L
         updateCountdownLabel()
         openSheet()

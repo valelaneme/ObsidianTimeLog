@@ -15,6 +15,7 @@ object LogFormatter {
 
     data class Input(
         val date: LocalDate,
+        val endDate: LocalDate = date,
         val startMin: Int,
         val endMin: Int,
         val level1: String,
@@ -44,10 +45,17 @@ object LogFormatter {
         }
 
         return when {
-            input.startMin == input.endMin -> emptyList() // 无效：时长为 0，UI 层会拦截提示
+            // 同一天且起止时刻相同：时长为 0（跨天时即使时刻相同也有时长，不能判空）
+            input.startMin == input.endMin && input.endDate == input.date -> emptyList()
+            input.endDate > input.date -> {
+                // 用户明确选了结束日期（跨到次日）：当天 start→24 点，次日 0→end
+                val parts = mutableListOf(input.date to line(input.startMin, 1440))
+                if (input.endMin > 0) parts.add(input.endDate to line(0, input.endMin))
+                parts
+            }
             input.endMin > input.startMin -> listOf(input.date to line(input.startMin, input.endMin))
             else -> {
-                // 跨午夜：当天一段必写；次日那段结束为 00:00 时时长为 0，跳过
+                // 兼容旧表达：结束日期没改、但结束时刻小于开始时刻，也视为跨午夜
                 val parts = mutableListOf(input.date to line(input.startMin, 1440))
                 if (input.endMin > 0) parts.add(input.date.plusDays(1) to line(0, input.endMin))
                 parts

@@ -118,9 +118,9 @@ class MainActivity : AppCompatActivity() {
     internal lateinit var tvPreview: TextView
     internal lateinit var btnSave: Button
     internal lateinit var btnSheetDelete: Button
-    internal lateinit var tvSheetTitle: TextView
     internal lateinit var timeline: TimelineView
     internal lateinit var etDate: EditText
+    internal lateinit var etEndDate: EditText
     internal lateinit var etStart: EditText
     internal lateinit var etEnd: EditText
     internal lateinit var etL1: EditText
@@ -330,6 +330,7 @@ class MainActivity : AppCompatActivity() {
         val target = viewDate.plusDays(dir.toLong())
         viewDate = target
         etDate.setText(target.toString())
+        etEndDate.setText(target.toString())
         tvStatsDate.text = "${Formatters.dateWithWeek(target)} ▾"
         // 相邻页从它现在的位置滑到 0（占满屏幕）
         val start = System.currentTimeMillis()
@@ -351,6 +352,7 @@ class MainActivity : AppCompatActivity() {
                     if (dir > 0 && target.isAfter(LocalDate.now())) {
                         viewDate = oldDate
                         etDate.setText(oldDate.toString())
+                        etEndDate.setText(oldDate.toString())
                         tvStatsDate.text = "${Formatters.dateWithWeek(oldDate)} ▾"
                         slideContentTo(0f, 160L)
                     } else {
@@ -433,6 +435,7 @@ class MainActivity : AppCompatActivity() {
         setupBackPress()
 
         etDate.setText(LocalDate.now().toString())
+        etEndDate.setText(LocalDate.now().toString())
         etL1.setText(prefs.level1)
         etL2.setText(prefs.level2)
         etTitle.setText(prefs.title)
@@ -550,10 +553,10 @@ class MainActivity : AppCompatActivity() {
         tvPreview = findViewById(R.id.tvPreview)
         btnSave = findViewById(R.id.btnSave)
         btnSheetDelete = findViewById(R.id.btnSheetDelete)
-        tvSheetTitle = findViewById(R.id.tvSheetTitle)
         recordsContainer = findViewById(R.id.recordsContainer)
         timeline = findViewById(R.id.timeline)
         etDate = findViewById(R.id.etDate)
+        etEndDate = findViewById(R.id.etEndDate)
         etStart = findViewById(R.id.etStart)
         etEnd = findViewById(R.id.etEnd)
         etL1 = findViewById(R.id.etL1)
@@ -596,15 +599,23 @@ class MainActivity : AppCompatActivity() {
         findViewById<Button>(R.id.btnInput).setOnClickListener { openNewSheet() }
 
         // 浮层收起
-        findViewById<Button>(R.id.btnHideSheet).setOnClickListener { closeSheet() }
         sheetDim.setOnClickListener { closeSheet() }
         sheetHandle.setOnTouchListener { v, event -> onHandleTouch(v, event) }
 
-        // 日期快捷
+        // 日期快捷：设为今天（开始/结束都设）
         findViewById<Button>(R.id.btnToday).setOnClickListener {
-            etDate.setText(LocalDate.now().toString())
+            val today = LocalDate.now().toString()
+            etDate.setText(today)
+            etEndDate.setText(today)
+            updatePreview()
         }
         findViewById<Button>(R.id.btnGoDate).setOnClickListener { goToTypedDate() }
+
+        // 日期/时间改为点选，不再手打
+        etDate.setOnClickListener { pickStartDate() }
+        etEndDate.setOnClickListener { pickEndDate() }
+        etStart.setOnClickListener { showTimePicker(etStart.text.toString()) { v -> etStart.setText(v) } }
+        etEnd.setOnClickListener { showTimePicker(etEnd.text.toString()) { v -> etEnd.setText(v) } }
 
         // 录入控件：时间一键填，少打字
         findViewById<Button>(R.id.btnNowStart).setOnClickListener { etStart.setText(nowHm()) }
@@ -713,20 +724,27 @@ class MainActivity : AppCompatActivity() {
         if (target == viewDate) return
         viewDate = target
         etDate.setText(target.toString())
+        etEndDate.setText(target.toString())
         reload()
     }
 
     /**
-     * 点顶栏日期：弹出一个只有日历的窗口（没有"确定/取消"按钮）。
-     * 点哪天就立即切到哪天并关掉窗口；点外面或按返回键也能关掉。
-     * maxDate = 现在，未来的日子灰掉点不了。
+     * 通用日期选择器：弹窗上边缘贴到被点日期控件的下边缘，手指点哪儿就在哪儿出结果。
+     * @param anchor 被点的日期控件
+     * @param initial 打开时选中的日期
+     * @param maxDay 能选的最晚日期
+     * @param onPicked 选中回调
      */
-    private fun showDatePicker() {
-        val today = LocalDate.now()
+    private fun showDatePickerAt(
+        anchor: View,
+        initial: LocalDate,
+        maxDay: LocalDate,
+        onPicked: (LocalDate) -> Unit
+    ) {
         val calendar = android.widget.CalendarView(this).apply {
-            maxDate = System.currentTimeMillis()
+            maxDate = maxDay.atTime(23, 59).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
             // 先设日期再挂监听，避免程序自己设日期时误触发一次"点选"
-            date = viewDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+            date = initial.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
         }
         val dialog = AlertDialog.Builder(this)
             .setView(calendar)
@@ -735,23 +753,75 @@ class MainActivity : AppCompatActivity() {
         calendar.setOnDateChangeListener { _, year, month, day ->
             if (picked) return@setOnDateChangeListener
             val chosen = LocalDate.of(year, month + 1, day)
-            if (chosen.isAfter(today)) {
+            if (chosen.isAfter(maxDay)) {
                 Toast.makeText(this, "还没到那一天", Toast.LENGTH_SHORT).show()
                 return@setOnDateChangeListener
             }
             picked = true
             dialog.dismiss()
-            pendingSlideDir = if (chosen.isAfter(viewDate)) 1 else -1
-            goToDate(chosen)
+            onPicked(chosen)
         }
         dialog.setCanceledOnTouchOutside(true)
         dialog.show()
-        // 弹窗整体上移，缩短手指从屏幕下方抬到日历的距离
+        // 上边贴到被点控件的下边；下方放不下（如录入面板在屏幕下半部）就自动上移，保证整张日历可见。
+        // 先隐藏、量好高度、摆好位置再显示，避免先居中再跳过去的闪烁。
         dialog.window?.let { w ->
-            val lp = w.attributes
-            lp.y = -(90 * resources.displayMetrics.density).toInt()
-            w.attributes = lp
+            val deco = w.decorView
+            deco.visibility = View.INVISIBLE
+            deco.post {
+                if (!dialog.isShowing) return@post
+                val loc = IntArray(2)
+                anchor.getLocationOnScreen(loc)
+                val anchorBottom = loc[1] + anchor.height
+                val gap = (8 * resources.displayMetrics.density).toInt()
+                val maxTop = resources.displayMetrics.heightPixels - deco.height - gap
+                val top = kotlin.math.min(anchorBottom, maxTop).coerceAtLeast(gap)
+                val lp = w.attributes
+                lp.gravity = android.view.Gravity.TOP
+                lp.y = top
+                w.attributes = lp
+                deco.visibility = View.VISIBLE
+            }
         }
+    }
+
+    /** 点顶栏日期：选哪天就看哪天。 */
+    private fun showDatePicker() {
+        showDatePickerAt(tvStatsDate, viewDate, LocalDate.now()) { chosen ->
+            pendingSlideDir = if (chosen.isAfter(viewDate)) 1 else -1
+            goToDate(chosen)
+        }
+    }
+
+    /** 点录入面板的开始日期；结束日期若早于它，自动跟上。 */
+    private fun pickStartDate() {
+        val cur = try { LocalDate.parse(etDate.text.toString().trim()) } catch (e: Exception) { viewDate }
+        showDatePickerAt(etDate, cur, LocalDate.now()) { chosen ->
+            etDate.setText(chosen.toString())
+            val end = try { LocalDate.parse(etEndDate.text.toString().trim()) } catch (e: Exception) { null }
+            if (end == null || end.isBefore(chosen)) etEndDate.setText(chosen.toString())
+            updatePreview()
+        }
+    }
+
+    /** 点录入面板的结束日期：最多到明天（跨午夜）。 */
+    private fun pickEndDate() {
+        val start = try { LocalDate.parse(etDate.text.toString().trim()) } catch (e: Exception) { viewDate }
+        val cur = try { LocalDate.parse(etEndDate.text.toString().trim()) } catch (e: Exception) { start }
+        showDatePickerAt(etEndDate, cur, LocalDate.now().plusDays(1)) { chosen ->
+            etEndDate.setText(chosen.toString())
+            updatePreview()
+        }
+    }
+
+    /** 点开始/结束时间：弹系统时间选择器，不用手打。 */
+    private fun showTimePicker(initial: String, onPicked: (String) -> Unit) {
+        val cur = parseTime(initial)
+        val h = cur?.div(60) ?: 12
+        val m = cur?.rem(60) ?: 0
+        android.app.TimePickerDialog(this, { _, hh, mm ->
+            onPicked("%02d:%02d".format(hh, mm))
+        }, h, m, true).show()
     }
 
     /**
