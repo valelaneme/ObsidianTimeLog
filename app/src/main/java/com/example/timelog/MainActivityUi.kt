@@ -602,22 +602,66 @@ fun MainActivity.requestNotifPermission() {
 
     /**
      * 把相邻那天的数据填进底层预览页（左右滑动时从侧边露出来的那一页）。
-     * dir = 1 显示后一天，-1 显示前一天。只是静态预览，供滑动时看个大概，不参与录入。
+     * dir = 1 显示后一天，-1 显示前一天。
+     * 预览页现在和真页一样完整：统计四格、一级分类、时间轴、逐条记录、问题行都有，
+     * 这样手指滑动时露出来的就是目标日的完整内容，滑到位后真页归位时几乎没有"空页→刷新"的感觉。
+     * 数据优先取 dayCache 里那天的完整 ParseResult（记录+提示+问题行），没缓存时退回相邻 entries。
      */
 fun MainActivity.renderNeighbor(dir: Int = neighborDir) {
         val date = viewDate.plusDays(dir.toLong())
-        val day = if (dir > 0) nextDayEntries else prevDayEntries
-        tvNeighborDate.text = "录入日期：$date"
-        neighborTimeline.setData(day, date)
-        val sorted = day.sortedWith(compareBy<LogEntry>({ it.startMin }, { it.endMin }))
-        tvNeighborRecords.text = if (sorted.isEmpty()) {
-            "$date 还没有时间记录。"
+        val cached = dayCache[date]
+        val allEntries = cached?.entries ?: (if (dir > 0) nextDayEntries else prevDayEntries)
+        val day = allEntries.filter { it.date == date }
+        val dayWarnings = cached?.warnings ?: emptyList()
+        val dayProblems = cached?.problems ?: emptyList()
+
+        // —— 统计：和 renderStats 完全同一套算法 ——
+        val summary: DaySummary = Analyzer.analyzeDay(allEntries, date)
+        val covered = Analyzer.coveredMinutes(day)
+        val unrecorded = (1440 - covered).coerceAtLeast(0)
+        nbStatRecord.text = Formatters.duration(covered)
+        nbStatUnrecorded.text = Formatters.duration(unrecorded)
+        nbStatCoverage.text = Formatters.percent(covered * 100.0 / 1440.0)
+        nbStatCount.text = "${summary.entries} 条"
+        val level1 = summary.byLevel1
+        nbLevel1.text = if (level1.isEmpty()) {
+            "一级分类：暂无"
         } else {
-            buildString {
-                sorted.forEach { e ->
-                    append(e.timeRange()).append("  ").append(e.title).append('\n')
-                }
+            "一级分类：" + level1.joinToString(" ") {
+                "${it.label} ${Formatters.duration(it.minutes)} ${Formatters.percent(it.percent)}"
+            }
+        }
+        if (dayWarnings.isEmpty()) {
+            nbWarnings.visibility = View.GONE
+            nbWarnings.text = ""
+        } else {
+            nbWarnings.visibility = View.VISIBLE
+            nbWarnings.text = buildString {
+                append("提示（共 ${dayWarnings.size} 条）\n")
+                dayWarnings.forEach { append("· ").append(it).append("\n") }
             }.trimEnd()
+        }
+
+        neighborTimeline.setData(day, date)
+
+        // —— 记录列表：复用真页的行渲染，保证样式一致 ——
+        nbRecordsContainer.removeAllViews()
+        val rowHeight = rowHeightPx()
+        val sorted = day.sortedWith(compareBy<LogEntry>({ it.startMin }, { it.endMin }))
+        if (sorted.isEmpty() && dayProblems.isEmpty()) {
+            nbRecordsContainer.addView(hintView("$date 还没有时间记录。"))
+        } else {
+            sorted.forEachIndexed { idx, entry ->
+                if (idx > 0) {
+                    val gap = entry.startMin - sorted[idx - 1].endMin
+                    if (gap > 0) nbRecordsContainer.addView(gapView(gap, rowHeight / 2))
+                }
+                nbRecordsContainer.addView(recordRow(entry, rowHeight))
+            }
+            if (dayProblems.isNotEmpty()) {
+                nbRecordsContainer.addView(problemHeader(dayProblems.size))
+                dayProblems.forEach { nbRecordsContainer.addView(problemRow(it, rowHeight)) }
+            }
         }
     }
 

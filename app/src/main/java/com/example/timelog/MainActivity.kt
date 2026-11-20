@@ -95,11 +95,16 @@ class MainActivity : AppCompatActivity() {
     internal lateinit var tvStatsDate: TextView
     internal lateinit var contentRoot: LinearLayout
     internal lateinit var contentScroll: android.widget.ScrollView
-    // 相邻日期预览页（左右滑动时从侧边露出，避免白边）
+    // 相邻日期预览页（左右滑动时从侧边露出，避免白边）：结构和真页一致，滑过来就是完整内容
     internal lateinit var neighborPage: View
-    internal lateinit var tvNeighborDate: TextView
     internal lateinit var neighborTimeline: TimelineView
-    internal lateinit var tvNeighborRecords: TextView
+    internal lateinit var nbStatRecord: TextView
+    internal lateinit var nbStatUnrecorded: TextView
+    internal lateinit var nbStatCoverage: TextView
+    internal lateinit var nbStatCount: TextView
+    internal lateinit var nbLevel1: TextView
+    internal lateinit var nbWarnings: TextView
+    internal lateinit var nbRecordsContainer: LinearLayout
     internal lateinit var tvStatRecord: TextView
     internal lateinit var tvStatUnrecorded: TextView
     internal lateinit var tvStatCoverage: TextView
@@ -232,17 +237,13 @@ class MainActivity : AppCompatActivity() {
             }
             MotionEvent.ACTION_UP -> {
                 if (swipeBlocked) {
-                    // 今天往明天滑：页面从没动过，不需要弹回动画，只给一句提示
-                    if (abs(ev.x - swipeDownX) >= 40f * density) {
-                        Toast.makeText(this, "今天就是最新的一天了", Toast.LENGTH_SHORT).show()
-                    }
+                    // 今天往明天滑：页面从没动过，也不需要任何提示，静默忽略
                 } else if (swipeHorizontal) {
                     val dx = ev.x - swipeDownX
                     if (abs(dx) >= 40f * density) {
                         val dir = if (dx < 0f) 1 else -1
-                        // 兜底：动画期间若刚好跨到今天，这里不再翻、也不播弹回动画
+                        // 兜底：动画期间若刚好跨到今天，这里不再翻、也不播弹回动画、不给提示
                         if (dir > 0 && viewDate >= LocalDate.now()) {
-                            Toast.makeText(this, "今天就是最新的一天了", Toast.LENGTH_SHORT).show()
                             contentRoot.translationX = 0f
                             neighborPage.visibility = View.GONE
                             neighborInUse = false
@@ -483,9 +484,14 @@ class MainActivity : AppCompatActivity() {
         contentRoot = findViewById(R.id.contentRoot)
         contentScroll = findViewById(R.id.contentScroll)
         neighborPage = findViewById(R.id.neighborPage)
-        tvNeighborDate = findViewById(R.id.tvNeighborDate)
         neighborTimeline = findViewById(R.id.neighborTimeline)
-        tvNeighborRecords = findViewById(R.id.tvNeighborRecords)
+        nbStatRecord = findViewById(R.id.nbStatRecord)
+        nbStatUnrecorded = findViewById(R.id.nbStatUnrecorded)
+        nbStatCoverage = findViewById(R.id.nbStatCoverage)
+        nbStatCount = findViewById(R.id.nbStatCount)
+        nbLevel1 = findViewById(R.id.nbLevel1)
+        nbWarnings = findViewById(R.id.nbWarnings)
+        nbRecordsContainer = findViewById(R.id.nbRecordsContainer)
         tvStatRecord = findViewById(R.id.tvStatRecord)
         tvStatUnrecorded = findViewById(R.id.tvStatUnrecorded)
         tvStatCoverage = findViewById(R.id.tvStatCoverage)
