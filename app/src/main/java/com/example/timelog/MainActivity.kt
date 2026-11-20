@@ -295,6 +295,13 @@ class MainActivity : AppCompatActivity() {
         val fromNX = neighborPage.translationX
         // 当前页沿手指方向滑出一整屏：左滑(dir=1)往左出 -> -w；右滑(dir=-1)往右出 -> +w
         val outX = -dir * w
+        // 手指抬起、确定要翻页的这一刻就把日期切过去：顶栏日期和录入框立刻显示目标那天，
+        // 不再等滑完动画 + 读完文件才变（那样慢半拍，像没反应）。
+        val oldDate = viewDate
+        val target = viewDate.plusDays(dir.toLong())
+        viewDate = target
+        etDate.setText(target.toString())
+        tvStatsDate.text = "录入日期：$target ▾"
         // 相邻页从它现在的位置滑到 0（占满屏幕）
         val start = System.currentTimeMillis()
         val duration = 220L
@@ -309,19 +316,17 @@ class MainActivity : AppCompatActivity() {
                     contentRoot.postOnAnimation(this)
                 } else {
                     slideTick = null
-                    // 两页已滑到位：现在才切日期读数据。预览页先留着占住屏幕，
-                    // 等新数据渲染好再撤掉，避免中途露出白底。
-                    // 这里直接内联切日期，不走 shiftDate——那种会设入场动画标记，
-                    // 而两页纸已经滑到位，再播一次入场动画就是弹跳。
-                    val target = viewDate.plusDays(dir.toLong())
-                    if (dir > 0 && target >= LocalDate.now()) {
-                        // 动画期间恰好跨到今天：没得翻，弹回原位
+                    // 两页已滑到位：日期在松手时已经切好，这里只管读新数据、归位。
+                    // 预览页先留着占住屏幕，等新数据渲染好再撤掉，避免中途露出白底。
+                    // 防御极罕见情况——滑动这 220ms 里跨过午夜，目标落到了未来，那就弹回去。
+                    if (dir > 0 && target.isAfter(LocalDate.now())) {
+                        viewDate = oldDate
+                        etDate.setText(oldDate.toString())
+                        tvStatsDate.text = "录入日期：$oldDate ▾"
                         slideContentTo(0f, 160L)
                     } else {
                         swipeCommitPending = true
                         pendingSlideDir = 0
-                        viewDate = target
-                        etDate.setText(target.toString())
                         reload()
                     }
                 }
