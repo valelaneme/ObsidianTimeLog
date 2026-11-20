@@ -52,86 +52,88 @@ import kotlin.math.abs
  */
 class MainActivity : AppCompatActivity() {
 
-    private lateinit var repo: VaultRepository
-    private lateinit var prefs: Prefs
-    private val mainHandler = Handler(Looper.getMainLooper())
+    internal lateinit var repo: VaultRepository
+    internal lateinit var prefs: Prefs
+    internal val mainHandler = Handler(Looper.getMainLooper())
 
-    private var viewDate: LocalDate = LocalDate.now()
-    private var entries: List<LogEntry> = emptyList()
-    private var warnings: List<String> = emptyList()
+    internal var viewDate: LocalDate = LocalDate.now()
+    internal var entries: List<LogEntry> = emptyList()
+    internal var warnings: List<String> = emptyList()
     // 相邻两天的记录，滑动时填进底层预览页；date 为 null 表示那天还没加载
-    private var prevDayEntries: List<LogEntry> = emptyList()
-    private var nextDayEntries: List<LogEntry> = emptyList()
-    private var neighborLoaded = false
+    internal var prevDayEntries: List<LogEntry> = emptyList()
+    internal var nextDayEntries: List<LogEntry> = emptyList()
+    internal var neighborLoaded = false
+    // 最近三天的完整数据缓存（记录+提示+问题行）：滑动到位后直接切换，不再二次读文件刷新
+    internal val dayCache = HashMap<LocalDate, ParseResult>()
     // 本次滑动是否正在用预览页；dir = 1 显示后一天，-1 显示前一天
-    private var neighborInUse = false
-    private var neighborDir = 1
+    internal var neighborInUse = false
+    internal var neighborDir = 1
     // 解析不出来的行（红字列在记录列表里，点开就能改）
-    private var problems: List<ProblemLine> = emptyList()
+    internal var problems: List<ProblemLine> = emptyList()
     // 记住上次用的文件夹：从设置页换文件夹回来时自动刷新，不用手动点刷新
-    private var lastTreeUri: String? = null
+    internal var lastTreeUri: String? = null
     // onResume 与 onCreate 会连着触发，第一次不重复读
-    private var firstResume = true
+    internal var firstResume = true
     // 上次真正读取的时刻，避免同一瞬间重复读两遍
-    private var lastReloadAt = 0L
+    internal var lastReloadAt = 0L
     // 翻日期的方向：+1 看后一天（内容从右侧滑进来），-1 看前一天。0 = 不做动画
-    private var pendingSlideDir = 0
+    internal var pendingSlideDir = 0
 
     // 正在编辑的那条记录（点记录行进来时非 null）；null = 新录入
-    private var editing: LogEntry? = null
+    internal var editing: LogEntry? = null
     // 那条记录的原始行所在的文件名日期（跨午夜时可能是前一天）
-    private var editingFileDate: LocalDate? = null
+    internal var editingFileDate: LocalDate? = null
     // 正在修的那一行问题记录（解析失败的行没有 LogEntry，只认原文）
-    private var editingRaw: String? = null
-    private var editingRawDate: LocalDate? = null
+    internal var editingRaw: String? = null
+    internal var editingRawDate: LocalDate? = null
 
     // 历史日志里统计出的常用候选（一级/二级分类、双链）
-    private var suggestions = Suggestions.EMPTY
-    private var suggestionsLoading = false
+    internal var suggestions = Suggestions.EMPTY
+    internal var suggestionsLoading = false
 
     // 视图
-    private lateinit var tvStatsDate: TextView
-    private lateinit var contentRoot: LinearLayout
-    private lateinit var contentScroll: android.widget.ScrollView
+    internal lateinit var tvStatsDate: TextView
+    internal lateinit var contentRoot: LinearLayout
+    internal lateinit var contentScroll: android.widget.ScrollView
     // 相邻日期预览页（左右滑动时从侧边露出，避免白边）
-    private lateinit var neighborPage: View
-    private lateinit var tvNeighborDate: TextView
-    private lateinit var neighborTimeline: TimelineView
-    private lateinit var tvNeighborRecords: TextView
-    private lateinit var tvStatRecord: TextView
-    private lateinit var tvStatUnrecorded: TextView
-    private lateinit var tvStatCoverage: TextView
-    private lateinit var tvStatCount: TextView
-    private lateinit var tvLevel1: TextView
-    private lateinit var tvWarnings: TextView
-    private lateinit var recordsContainer: LinearLayout
-    private lateinit var tvCheckTitle: TextView
-    private lateinit var tvCheck: TextView
-    private lateinit var tvPreview: TextView
-    private lateinit var btnSave: Button
-    private lateinit var btnSheetDelete: Button
-    private lateinit var tvSheetTitle: TextView
-    private lateinit var timeline: TimelineView
-    private lateinit var etDate: EditText
-    private lateinit var etStart: EditText
-    private lateinit var etEnd: EditText
-    private lateinit var etL1: EditText
-    private lateinit var etL2: EditText
-    private lateinit var etTitle: EditText
-    private lateinit var etLinks: EditText
-    private lateinit var etNote: EditText
-    private lateinit var l1CandidatesRow: LinearLayout
-    private lateinit var l2CandidatesRow: LinearLayout
-    private lateinit var linkCandidatesRow: LinearLayout
-    private lateinit var cbContinue: CheckBox
-    private lateinit var inputSheet: View
-    private lateinit var sheetDim: View
-    private lateinit var sheetHandle: View
-    private lateinit var btnStopwatch: Button
-    private lateinit var btnCountdown: Button
+    internal lateinit var neighborPage: View
+    internal lateinit var tvNeighborDate: TextView
+    internal lateinit var neighborTimeline: TimelineView
+    internal lateinit var tvNeighborRecords: TextView
+    internal lateinit var tvStatRecord: TextView
+    internal lateinit var tvStatUnrecorded: TextView
+    internal lateinit var tvStatCoverage: TextView
+    internal lateinit var tvStatCount: TextView
+    internal lateinit var tvLevel1: TextView
+    internal lateinit var tvWarnings: TextView
+    internal lateinit var recordsContainer: LinearLayout
+    internal lateinit var tvCheckTitle: TextView
+    internal lateinit var tvCheck: TextView
+    internal lateinit var tvPreview: TextView
+    internal lateinit var btnSave: Button
+    internal lateinit var btnSheetDelete: Button
+    internal lateinit var tvSheetTitle: TextView
+    internal lateinit var timeline: TimelineView
+    internal lateinit var etDate: EditText
+    internal lateinit var etStart: EditText
+    internal lateinit var etEnd: EditText
+    internal lateinit var etL1: EditText
+    internal lateinit var etL2: EditText
+    internal lateinit var etTitle: EditText
+    internal lateinit var etLinks: EditText
+    internal lateinit var etNote: EditText
+    internal lateinit var l1CandidatesRow: LinearLayout
+    internal lateinit var l2CandidatesRow: LinearLayout
+    internal lateinit var linkCandidatesRow: LinearLayout
+    internal lateinit var cbContinue: CheckBox
+    internal lateinit var inputSheet: View
+    internal lateinit var sheetDim: View
+    internal lateinit var sheetHandle: View
+    internal lateinit var btnStopwatch: Button
+    internal lateinit var btnCountdown: Button
 
     // 正计时按钮文字刷新
-    private val tick = object : Runnable {
+    internal val tick = object : Runnable {
         override fun run() {
             updateStopwatchLabel()
             updateCountdownLabel()
@@ -140,14 +142,16 @@ class MainActivity : AppCompatActivity() {
     }
 
     // 跟手翻页：按下位置 + 是否已判定为横向滑动
-    private var swipeDownX = 0f
-    private var swipeDownY = 0f
-    private var swipeDecided = false
-    private var swipeHorizontal = false
+    internal var swipeDownX = 0f
+    internal var swipeDownY = 0f
+    internal var swipeDecided = false
+    internal var swipeHorizontal = false
+    // 今天再往明天的手势：明天不存在，整段手势不跟手、不弹回、完全不出动画
+    internal var swipeBlocked = false
     // 自己算帧的滑动任务（不走系统动画，开发者选项关了动画也有效）
-    private var slideTick: Runnable? = null
+    internal var slideTick: Runnable? = null
     // 松手交接动画已滑完、正在切日期读数据：读好后只归位，不再做位移动画
-    private var swipeCommitPending = false
+    internal var swipeCommitPending = false
 
     /**
      * 左右滑动翻日期：手指按住直接拖，页面实时跟手移动；松手划够 40dp 就翻页。
@@ -160,6 +164,7 @@ class MainActivity : AppCompatActivity() {
         if (inputSheet.visibility == View.VISIBLE) {
             swipeDecided = false
             swipeHorizontal = false
+            swipeBlocked = false
             return super.dispatchTouchEvent(ev)
         }
         when (ev.actionMasked) {
@@ -170,6 +175,7 @@ class MainActivity : AppCompatActivity() {
                     swipeDownY = ev.y
                     swipeDecided = true
                     swipeHorizontal = false
+                    swipeBlocked = false
                     return super.dispatchTouchEvent(ev)
                 }
                 slideTick?.let { contentRoot.removeCallbacks(it) }
@@ -185,14 +191,22 @@ class MainActivity : AppCompatActivity() {
                 swipeDownY = ev.y
                 swipeDecided = false
                 swipeHorizontal = false
+                swipeBlocked = false
             }
             MotionEvent.ACTION_MOVE -> {
                 val dx = ev.x - swipeDownX
                 val dy = ev.y - swipeDownY
                 if (!swipeDecided) {
                     if (abs(dx) > 6f * density && abs(dx) > abs(dy) * 1.2f) {
-                        swipeHorizontal = true
                         swipeDecided = true
+                        // 往明天滑（左滑 dir=1），而当前已经是今天：明天没有内容，
+                        // 从一开始就封锁——不跟手、不显示预览页、松手也不弹回，全程无动画
+                        val dir = if (dx < 0f) 1 else -1
+                        if (dir > 0 && viewDate >= LocalDate.now()) {
+                            swipeBlocked = true
+                        } else {
+                            swipeHorizontal = true
+                        }
                     } else if (abs(dy) > 6f * density) {
                         swipeDecided = true   // 判定为纵向，交给 ScrollView 正常滚
                     }
@@ -217,14 +231,21 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             MotionEvent.ACTION_UP -> {
-                if (swipeHorizontal) {
+                if (swipeBlocked) {
+                    // 今天往明天滑：页面从没动过，不需要弹回动画，只给一句提示
+                    if (abs(ev.x - swipeDownX) >= 40f * density) {
+                        Toast.makeText(this, "今天就是最新的一天了", Toast.LENGTH_SHORT).show()
+                    }
+                } else if (swipeHorizontal) {
                     val dx = ev.x - swipeDownX
                     if (abs(dx) >= 40f * density) {
                         val dir = if (dx < 0f) 1 else -1
-                        // 先判断能不能翻：到今天就不能再往后了（提前拦，避免滑到一半又弹回来）
+                        // 兜底：动画期间若刚好跨到今天，这里不再翻、也不播弹回动画
                         if (dir > 0 && viewDate >= LocalDate.now()) {
                             Toast.makeText(this, "今天就是最新的一天了", Toast.LENGTH_SHORT).show()
-                            slideContentTo(0f, 180L)
+                            contentRoot.translationX = 0f
+                            neighborPage.visibility = View.GONE
+                            neighborInUse = false
                         } else {
                             // 顺着手指方向把两页滑到位，滑完那一刻才切日期、换内容
                             commitSwipe(dir)
@@ -235,11 +256,13 @@ class MainActivity : AppCompatActivity() {
                 }
                 swipeDecided = false
                 swipeHorizontal = false
+                swipeBlocked = false
             }
             MotionEvent.ACTION_CANCEL -> {
                 if (swipeHorizontal) slideContentTo(0f, 160L)
                 swipeDecided = false
                 swipeHorizontal = false
+                swipeBlocked = false
             }
         }
         return super.dispatchTouchEvent(ev)
@@ -325,9 +348,7 @@ class MainActivity : AppCompatActivity() {
                         tvStatsDate.text = "录入日期：$oldDate ▾"
                         slideContentTo(0f, 160L)
                     } else {
-                        swipeCommitPending = true
-                        pendingSlideDir = 0
-                        reload()
+                        applyCachedDay(target, dir, oldDate)
                     }
                 }
             }
@@ -336,11 +357,63 @@ class MainActivity : AppCompatActivity() {
         contentRoot.postOnAnimation(tick)
     }
 
+    /**
+     * 滑动到位后直接从缓存切换目标那天，不再二次读文件刷新。
+     * 手指抬起时 viewDate 已是 target；这里把缓存里的完整数据填进当前页、渲染、归位，
+     * 再后台补读新方向缺的那一天，保证下次滑动仍有完整缓存。
+     */
+    private fun applyCachedDay(target: LocalDate, dir: Int, oldDate: LocalDate) {
+        val cached = dayCache[target]
+        if (cached == null) {
+            // 极端情况缓存没命中，退回读文件
+            swipeCommitPending = true
+            pendingSlideDir = 0
+            reload()
+            return
+        }
+        entries = cached.entries
+        warnings = cached.warnings
+        problems = cached.problems
+        renderStats()
+        renderRecords()
+        renderCheck(emptyList())
+
+        // 相邻缓存跟着滚动：旧当前那天仍有数据，新方向缺的一天留给后台补
+        val keep = dayCache[oldDate]?.entries?.filter { it.date == oldDate } ?: emptyList()
+        if (dir > 0) {
+            prevDayEntries = keep
+            nextDayEntries = emptyList()
+        } else {
+            nextDayEntries = keep
+            prevDayEntries = emptyList()
+        }
+        neighborLoaded = true
+        pendingSlideDir = 0
+
+        // 两页已滑到位，换新日期后直接归位，不再播入场动画（否则又是弹跳）
+        contentRoot.translationX = 0f
+        contentRoot.alpha = 1f
+        contentScroll.scrollTo(0, 0)
+        neighborPage.visibility = View.GONE
+        neighborInUse = false
+
+        // 后台补读新方向缺的那一天，只更新缓存和预览数据，不碰当前页
+        val missingDate = target.plusDays(dir.toLong())
+        Thread {
+            val missing = repo.loadDay(missingDate)
+            mainHandler.post {
+                dayCache[missingDate] = missing
+                if (dir > 0) nextDayEntries = missing.entries.filter { it.date == missingDate }
+                else prevDayEntries = missing.entries.filter { it.date == missingDate }
+            }
+        }.start()
+    }
+
     companion object {
-        private const val REQ_SETTINGS = 42
-        private const val REQ_NOTIF = 43
+        internal const val REQ_SETTINGS = 42
+        internal const val REQ_NOTIF = 43
         // 记录行字号（sp）；行高固定是它的 2 倍
-        private const val ROW_TEXT_SP = 13f
+        internal const val ROW_TEXT_SP = 13f
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -453,6 +526,16 @@ class MainActivity : AppCompatActivity() {
             startActivityForResult(Intent(this, SettingsActivity::class.java), REQ_SETTINGS)
         }
         tvStatsDate.setOnClickListener { showDatePicker() }
+        // 右上角：一键回到今天（已在今天则不动）
+        findViewById<View>(R.id.btnBackToday).setOnClickListener {
+            val today = LocalDate.now()
+            if (today == viewDate) {
+                Toast.makeText(this, "已经在今天了", Toast.LENGTH_SHORT).show()
+            } else {
+                pendingSlideDir = if (today.isAfter(viewDate)) 1 else -1
+                goToDate(today)
+            }
+        }
 
         // 底部三按钮
         btnStopwatch.setOnClickListener { onStopwatchClick() }
@@ -502,169 +585,9 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ---------- 录入浮层 ----------
-
-    private fun limitSheetHeight() {
-        inputSheet.post {
-            // 直接固定成半屏：父容器给确定高度后，子 ScrollView 的 weight=1 才会分配剩余空间
-            val half = (resources.displayMetrics.heightPixels * 0.5f).toInt()
-            val lp = inputSheet.layoutParams
-            lp.height = half
-            inputSheet.layoutParams = lp
-        }
-    }
-
-    /** 新录入：清掉编辑态，日期回到当前正在看的那天。 */
-    private fun openNewSheet() {
-        setEditTarget(null, null)
-        etDate.setText(viewDate.toString())
-        openSheet()
-    }
-
-    /**
-     * 点某条记录：把它的原文回填到浮层，保存时改写原来那一行（不再追加）。
-     * 跨午夜写成的两行会被当成一条整体来编辑。
-     */
-    private fun openEditSheet(entry: LogEntry) {
-        val fileDate = rawFileDate(entry)
-        setEditTarget(entry, fileDate)
-        etDate.setText(fileDate.toString())
-        LogParser.timeOfLine(entry.raw)?.let { (start, end) ->
-            etStart.setText(LogEntry.fmt(start))
-            etEnd.setText(LogEntry.fmt(end))
-        }
-        etL1.setText(entry.level1)
-        etL2.setText(entry.level2)
-        etTitle.setText(entry.title)
-        etLinks.setText(entry.links.joinToString(" "))
-        etNote.setText(entry.note)
-        openSheet()
-    }
-
-    /**
-     * 点一条"解析不出来"的红字行：尽力把能认出来的字段填进浮层，
-     * 时间填不出来的就留空，等用户补——补好保存后替换掉原来那一行。
-     */
-    private fun openProblemSheet(problem: ProblemLine) {
-        clearEditTarget()
-        editingRaw = problem.raw
-        editingRawDate = problem.date
-        tvSheetTitle.text = "修正第${problem.lineNo}行：${problem.reason}"
-        btnSave.text = "保存修正"
-        btnSheetDelete.visibility = View.VISIBLE
-
-        val fill = LogParser.partial(problem.raw)
-        etDate.setText(problem.date.toString())
-        etStart.setText(fill.startHm)
-        etEnd.setText(fill.endHm)
-        etL1.setText(fill.level1)
-        etL2.setText(fill.level2)
-        etTitle.setText(fill.title)
-        etLinks.setText(fill.links.joinToString(" "))
-        etNote.setText(fill.note)
-        openSheet()
-    }
-
-    /** 切换「新录入 / 编辑 / 修问题行」三种模式：标题、按钮文字、删除按钮都跟着变。 */
-    private fun setEditTarget(entry: LogEntry?, fileDate: LocalDate?) {
-        clearEditTarget()
-        editing = entry
-        editingFileDate = fileDate
-        tvSheetTitle.text = if (entry != null) {
-            "编辑记录（点「返回」退出）"
-        } else {
-            "录入（下滑或点「返回」退出）"
-        }
-        btnSave.text = if (entry != null) "保存修改" else "校验并追加到当天 md"
-        btnSheetDelete.visibility = if (entry != null) View.VISIBLE else View.GONE
-    }
-
-    private fun clearEditTarget() {
-        editing = null
-        editingFileDate = null
-        editingRaw = null
-        editingRawDate = null
-    }
-
-    /** 原始行写在哪个 md 里：跨午夜拆出来的后半段，实际写在前一天的文件里。 */
-    private fun rawFileDate(entry: LogEntry): LocalDate {
-        val raw = LogParser.timeOfLine(entry.raw) ?: return entry.date
-        val cross = raw.second <= raw.first
-        if (!cross) return entry.date
-        return if (entry.endMin == 1440) entry.date else entry.date.minusDays(1)
-    }
-
-    // 浮层滑动动画的序号：快速开关时用，防止上一次收起的收尾把新打开的面板又藏掉
-    private var sheetAnimToken = 0
-
-    private fun sheetHeight(): Float {
-        val h = inputSheet.height
-        return if (h > 0) h.toFloat() else resources.displayMetrics.heightPixels * 0.5f
-    }
-
-    /**
-     * 打开录入面板：从屏幕下沿滑上来，背景蒙层同时淡入。
-     * 只动 translationY / alpha 两个属性，交给 GPU 合成，和翻日期那次动画一个路子。
-     */
-    private fun openSheet() {
-        sheetAnimToken++
-        inputSheet.animate().cancel()
-        sheetDim.animate().cancel()
-        if (inputSheet.visibility != View.VISIBLE) {
-            inputSheet.translationY = sheetHeight()
-            inputSheet.alpha = 0f
-            sheetDim.alpha = 0f
-            inputSheet.visibility = View.VISIBLE
-            sheetDim.visibility = View.VISIBLE
-        }
-        updatePreview()
-        inputSheet.animate()
-            .translationY(0f)
-            .alpha(1f)
-            .setDuration(220L)
-            .setInterpolator(android.view.animation.DecelerateInterpolator())
-            .start()
-        sheetDim.animate().alpha(1f).setDuration(220L).start()
-    }
-
-    /** 收起录入面板：往下滑回去，背景蒙层淡出；动画结束才真正 GONE。 */
-    private fun closeSheet() {
-        if (inputSheet.visibility != View.VISIBLE) return
-        sheetAnimToken++
-        val token = sheetAnimToken
-        setEditTarget(null, null)
-        inputSheet.animate().cancel()
-        sheetDim.animate().cancel()
-        inputSheet.animate()
-            .translationY(sheetHeight())
-            .alpha(0f)
-            .setDuration(180L)
-            .setInterpolator(android.view.animation.AccelerateInterpolator())
-            .withEndAction {
-                if (token == sheetAnimToken) {
-                    inputSheet.visibility = View.GONE
-                    sheetDim.visibility = View.GONE
-                    inputSheet.translationY = 0f
-                    inputSheet.alpha = 1f
-                    sheetDim.alpha = 1f
-                }
-            }
-            .start()
-        sheetDim.animate().alpha(0f).setDuration(180L).start()
-    }
-
-    private var touchStartY = 0f
-    /** 把手指从把手往下拖超过 60px 就收起浮层。 */
-    private fun onHandleTouch(v: View, event: MotionEvent): Boolean {
-        when (event.action) {
-            MotionEvent.ACTION_DOWN -> touchStartY = event.y
-            MotionEvent.ACTION_UP -> {
-                if (event.y - touchStartY > 60f) closeSheet()
-                else v.performClick()
-            }
-        }
-        return true
-    }
+    // 录入浮层的动画状态（方法都在 MainActivityUi.kt）
+    internal var sheetAnimToken = 0
+    internal var touchStartY = 0f
 
     // ---------- 数据读取 ----------
 
@@ -684,18 +607,23 @@ class MainActivity : AppCompatActivity() {
      * 只读当天，秒开。
      * force = false 时，若刚读过（600ms 内）就跳过，避免 onResume 和设置页回调整出两次重复读。
      */
-    private fun reload(force: Boolean = true) {
+    internal fun reload(force: Boolean = true) {
         val now = System.currentTimeMillis()
         if (!force && now - lastReloadAt < 600) return
         lastReloadAt = now
         Thread {
             val result: ParseResult = repo.loadDay(viewDate)
-            // 顺带读相邻两天，供左右滑动时填充侧边预览页（避免白边）
+            // 顺带读相邻两天：既填侧边预览页，也进完整缓存，供滑动到位后直接切换
             val prevDate = viewDate.minusDays(1)
             val nextDate = viewDate.plusDays(1)
             val prevResult = repo.loadDay(prevDate)
             val nextResult = repo.loadDay(nextDate)
             mainHandler.post {
+                // 三天完整结果一次入缓存；只留这三天，避免长期翻页越攒越多
+                dayCache.clear()
+                dayCache[viewDate] = result
+                dayCache[prevDate] = prevResult
+                dayCache[nextDate] = nextResult
                 entries = result.entries
                 warnings = result.warnings
                 problems = result.problems
@@ -823,721 +751,4 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun nowHalfEnd(): Int = (nowMinuteOfDay() / 30 + 1) * 30
-
-    // ---------- 常用候选一键选 ----------
-
-    /** 后台扫历史日志；只在第一次打开或换文件夹后扫，之后用内存里的结果。 */
-    private fun loadSuggestionsIfNeeded() {
-        if (suggestionsLoading || repo.root() == null) return
-        if (suggestions != Suggestions.EMPTY) {
-            renderSuggestions()
-            return
-        }
-        suggestionsLoading = true
-        Thread {
-            val result = repo.loadSuggestions()
-            mainHandler.post {
-                suggestions = result
-                suggestionsLoading = false
-                renderSuggestions()
-            }
-        }.start()
-    }
-
-    private fun renderSuggestions() {
-        renderCandidateRow(l1CandidatesRow, suggestions.level1, etL1, false)
-        renderCandidateRow(l2CandidatesRow, suggestions.level2, etL2, false)
-        renderCandidateRow(linkCandidatesRow, suggestions.links, etLinks, true)
-    }
-
-    private fun renderCandidateRow(
-        row: LinearLayout,
-        values: List<String>,
-        target: EditText,
-        isLink: Boolean
-    ) {
-        row.removeAllViews()
-        if (values.isEmpty()) return
-        row.addView(TextView(this).apply {
-            text = "常用："
-            textSize = 12f
-            setTextColor(Color.parseColor("#5F6368"))
-        })
-        values.forEach { value ->
-            val chip = Button(this).apply {
-                text = value
-                textSize = 11f
-                isAllCaps = false
-                setPadding(10, 2, 10, 2)
-                setBackgroundColor(Color.parseColor("#E8F0FE"))
-                setTextColor(Color.parseColor("#1967D2"))
-            }
-            chip.setOnClickListener { applyCandidate(target, value, isLink) }
-            row.addView(
-                chip,
-                LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply { setMargins(0, 0, 8, 0) }
-            )
-        }
-    }
-
-    /** 分类=直接填入；双链=点一下添加、再点一下移除。 */
-    private fun applyCandidate(target: EditText, value: String, isLink: Boolean) {
-        if (!isLink) {
-            target.setText(value)
-            target.setSelection(value.length)
-        } else {
-            val current = target.text.toString().trim()
-                .split(Regex("""\s+""")).filter { it.isNotEmpty() }.toMutableList()
-            if (current.contains(value)) current.remove(value) else current.add(value)
-            val joined = current.joinToString(" ")
-            target.setText(joined)
-            target.setSelection(joined.length)
-        }
-        updatePreview()
-    }
-
-    // ---------- 录入 + 保存前校验 ----------
-
-    private fun parseTime(value: String): Int? {
-        val parts = value.trim().split(":")
-        if (parts.size != 2) return null
-        val h = parts[0].toIntOrNull() ?: return null
-        val m = parts[1].toIntOrNull() ?: return null
-        if (h !in 0..24 || m !in 0..59 || (h == 24 && m != 0)) return null
-        return h * 60 + m
-    }
-
-    private fun buildInput(): LogFormatter.Input? {
-        val start = parseTime(etStart.text.toString()) ?: return null
-        val end = parseTime(etEnd.text.toString()) ?: return null
-        if (start == end) return null
-        val date = try {
-            LocalDate.parse(etDate.text.toString().trim())
-        } catch (e: Exception) {
-            return null
-        }
-        val links = etLinks.text.toString().trim()
-            .split(Regex("""\s+""")).filter { it.isNotEmpty() }
-        return LogFormatter.Input(
-            date = date,
-            startMin = start,
-            endMin = end,
-            level1 = etL1.text.toString().trim(),
-            level2 = etL2.text.toString().trim(),
-            title = etTitle.text.toString().trim(),
-            note = etNote.text.toString().trim(),
-            links = links
-        )
-    }
-
-    private fun updatePreview() {
-        val input = buildInput()
-        if (input == null) {
-            tvPreview.text = "时间格式请写成 09:00，日期 2026-11-19"
-            return
-        }
-        val lines = LogFormatter.build(input)
-        val sb = StringBuilder()
-        when {
-            editing != null -> sb.append("【编辑】保存后替换原来那一行\n")
-            editingRaw != null -> sb.append("【修正】保存后替换掉那行有问题的记录\n")
-        }
-        lines.forEach { (date, line) -> sb.append("$date\n$line\n\n") }
-        if (lines.size > 1) sb.append("提示：跨午夜，将按 24 点拆成两天两行。\n")
-        tvPreview.text = sb.toString().trimEnd()
-    }
-
-    /** 保存：先校验重叠，有问题弹窗让用户改时间或仍要保存。 */
-    private fun onSaveClick() {
-        val input = buildInput()
-        if (input == null) {
-            Toast.makeText(this, "时间或日期格式不对", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        // 把这次输入解析成候选记录（含跨午夜拆分），复用正式解析器，保证口径一致
-        val candidates = mutableListOf<LogEntry>()
-        LogFormatter.build(input).forEach { (date, line) ->
-            candidates.addAll(LogParser.parseLine(line, date).entries)
-        }
-        if (candidates.isEmpty()) {
-            Toast.makeText(this, "这段时间长度为 0，不用记", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        // 跨午夜时还要补读"次日"文件，否则次日那段会漏检重叠
-        Thread {
-            val extra = mutableListOf<LogEntry>()
-            candidates.map { it.date }.distinct()
-                .filter { it != viewDate }
-                .forEach { extra.addAll(repo.loadExactDay(it)) }
-
-            // 编辑时要把"原来那条"排除掉，否则会跟它自己判重叠
-            val base = editing?.let { old -> entries.filter { !sameEntry(it, old) } } ?: entries
-            val all = base + candidates + extra
-            val mine = Analyzer.overlaps(all).filter { o ->
-                candidates.any { c -> sameEntry(c, o.first) || sameEntry(c, o.second) }
-            }
-            mainHandler.post {
-                if (mine.isNotEmpty()) {
-                    AlertDialog.Builder(this@MainActivity)
-                        .setTitle("时间重叠，建议修改")
-                        .setMessage(describeOverlaps(mine))
-                        .setPositiveButton("返回修改时间", null)
-                        .setNegativeButton("仍然保存") { _, _ -> doSave(input) }
-                        .show()
-                } else {
-                    doSave(input)
-                }
-            }
-        }.start()
-    }
-
-    /** 按内容比对，而不是靠对象引用，避免跨线程/重建列表后漏判。 */
-    private fun sameEntry(a: LogEntry, b: LogEntry): Boolean =
-        a.date == b.date && a.startMin == b.startMin && a.endMin == b.endMin &&
-            a.level1 == b.level1 && a.level2 == b.level2 && a.title == b.title && a.raw == b.raw
-
-    private fun describeOverlaps(list: List<Overlap>): String {
-        val sb = StringBuilder("新增的时间段与已有记录重叠 ${list.size} 处：\n\n")
-        list.take(8).forEach { o ->
-            sb.append("· ${o.date} 重叠 ${Formatters.duration(o.minutes)}\n")
-            sb.append("   ${o.first.timeRange()} ${o.first.level1} ${o.first.title}\n")
-            sb.append("   ${o.second.timeRange()} ${o.second.level1} ${o.second.title}\n")
-        }
-        if (list.size > 8) sb.append("… 还有 ${list.size - 8} 处\n")
-        sb.append("\n点\"返回修改时间\"改起止时刻，或\"仍然保存\"照写。")
-        return sb.toString()
-    }
-
-    private fun doSave(input: LogFormatter.Input) {
-        prefs.level1 = input.level1
-        prefs.level2 = input.level2
-        prefs.title = input.title
-        prefs.links = etLinks.text.toString().trim()
-
-        // 先记住编辑目标：closeSheet() 会把 editing / editingRaw 清空
-        val editingEntry = editing
-        val editingDate = editingFileDate
-        val rawLine = editingRaw
-        val rawDate = editingRawDate
-
-        val result = when {
-            rawLine != null && rawDate != null -> repo.replaceLine(rawDate, rawLine, input)
-            editingEntry != null && editingDate != null -> repo.replaceEntry(editingDate, editingEntry, input)
-            else -> repo.append(input)
-        }
-        if (result.isFailure) {
-            Toast.makeText(this, "写入失败：${result.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
-            return
-        }
-
-        // 编辑已有记录 / 修正问题行：改完就收工，不走"连续录入"
-        if (editingEntry != null || rawLine != null) {
-            val msg = if (rawLine != null) "已修正这一行" else "已更新这条记录"
-            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
-            etStart.text.clear()
-            etEnd.text.clear()
-            etNote.text.clear()
-            // 只有真的把日期改到了别的天才跳过去；否则留在当前看的那天（跨午夜那半段不会被甩到前一天）
-            val oldDate = editingDate ?: rawDate
-            if (oldDate == null || input.date != oldDate) viewDate = input.date
-            closeSheet()
-            reload()
-            suggestions = Suggestions.EMPTY
-            loadSuggestionsIfNeeded()
-            return
-        }
-
-        Toast.makeText(this, "已追加 ${result.getOrNull() ?: 0} 行到 md", Toast.LENGTH_SHORT).show()
-        etNote.text.clear()
-
-        val crossed = input.endMin < input.startMin
-        val nextDay = when {
-            crossed || input.endMin >= 1440 -> input.date.plusDays(1)
-            else -> input.date
-        }
-        val nextStart = when {
-            crossed -> input.endMin          // 跨午夜：次日那段从 00:xx 接上
-            input.endMin >= 1440 -> 0
-            else -> input.endMin
-        }
-
-        if (cbContinue.isChecked) {
-            etDate.setText(nextDay.toString())
-            etStart.setText(LogEntry.fmt(nextStart))
-            etEnd.text.clear()
-            viewDate = nextDay
-            openSheet()
-            Toast.makeText(this, "开始时间已接上一段，继续填", Toast.LENGTH_SHORT).show()
-        } else {
-            etStart.text.clear()
-            etEnd.text.clear()
-            viewDate = input.date
-            closeSheet()
-        }
-        reload()
-        // 新输入可能带来新名字，候选列表后台刷新一次
-        suggestions = Suggestions.EMPTY
-        loadSuggestionsIfNeeded()
-    }
-
-    // ---------- 正计时 ----------
-
-    private fun onStopwatchClick() {
-        val start = prefs.stopwatchStart
-        if (start == 0L) {
-            prefs.stopwatchStart = System.currentTimeMillis()
-            updateStopwatchLabel()
-            Toast.makeText(this, "已开始，忙完再点一下", Toast.LENGTH_SHORT).show()
-        } else {
-            val endMs = System.currentTimeMillis()
-            etStart.setText(hm(start))
-            etEnd.setText(hm(endMs))
-            // 计时是真实发生的，日期按今天走，不跟着首页正在看的那天走
-            etDate.setText(LocalDate.now().toString())
-            prefs.stopwatchStart = 0L
-            updateStopwatchLabel()
-            openSheet()
-            Toast.makeText(this, "时间段已填好，补分类即可", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun updateStopwatchLabel() {
-        val s = prefs.stopwatchStart
-        btnStopwatch.text = if (s == 0L) "⏱ 正计时" else "⏹ 停止 ${elapsed(s)}"
-    }
-
-    private fun elapsed(startMs: Long): String {
-        val sec = ((System.currentTimeMillis() - startMs) / 1000L).coerceAtLeast(0)
-        return "%02d:%02d".format(sec / 60, sec % 60)
-    }
-
-    // ---------- 倒计时（系统闹钟 + 通知） ----------
-
-    private fun onCountdownClick() {
-        val end = prefs.countdownEnd
-        if (end > System.currentTimeMillis()) {
-            AlertDialog.Builder(this)
-                .setTitle("倒计时进行中")
-                .setMessage("还剩 ${millisToHm(end - System.currentTimeMillis())}，要取消吗？")
-                .setPositiveButton("取消倒计时") { _, _ -> cancelCountdown() }
-                .setNegativeButton("保留", null)
-                .show()
-            return
-        }
-        // 分钟数用设置页里那个值预填，改一次就记住，下次直接点「开始」
-        val input = android.widget.EditText(this).apply {
-            inputType = android.text.InputType.TYPE_CLASS_NUMBER
-            hint = "分钟数，如 25"
-            setText(prefs.countdownMinutes.toString())
-            setSelection(text.length)
-        }
-        AlertDialog.Builder(this)
-            .setTitle("倒计时多少分钟")
-            .setMessage("默认 ${prefs.countdownMinutes} 分钟（可在设置页改）。到点弹通知，关掉 App 也会提醒。")
-            .setView(input)
-            .setPositiveButton("开始") { _, _ ->
-                val minutes = input.text.toString().trim().toLongOrNull() ?: 0L
-                if (minutes <= 0) {
-                    Toast.makeText(this, "请输入大于 0 的分钟数", Toast.LENGTH_SHORT).show()
-                    return@setPositiveButton
-                }
-                // 这次用的数字顺手记成默认值，下次不用再改
-                prefs.countdownMinutes = minutes.toInt()
-                startCountdown(minutes)
-            }
-            .setNegativeButton("取消", null)
-            .show()
-    }
-
-    private fun startCountdown(minutes: Long) {
-        val startMs = System.currentTimeMillis()
-        val endMs = startMs + minutes * 60_000L
-        val startHm = hm(startMs)
-        val endHm = hm(endMs)
-        prefs.countdownEnd = endMs
-
-        val intent = Intent(this, TimerReceiver::class.java).apply {
-            putExtra(TimerReceiver.EXTRA_START, startHm)
-            putExtra(TimerReceiver.EXTRA_END, endHm)
-        }
-        val flags = PendingIntent.FLAG_UPDATE_CURRENT or
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
-        val pi = PendingIntent.getBroadcast(this, 0, intent, flags)
-        val am = getSystemService(Context.ALARM_SERVICE) as AlarmManager
-
-        // Android 12+ 精确闹钟需特殊权限；没有就降级为省电闹钟（可能晚几分钟，但一定响）
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && am.canScheduleExactAlarms()) {
-            am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, endMs, pi)
-        } else {
-            am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, endMs, pi)
-        }
-        updateCountdownLabel()
-        Toast.makeText(this, "$minutes 分钟倒计时已设，到点通知", Toast.LENGTH_SHORT).show()
-    }
-
-    private fun cancelCountdown() {
-        prefs.countdownEnd = 0L
-        val intent = Intent(this, TimerReceiver::class.java)
-        val flags = PendingIntent.FLAG_UPDATE_CURRENT or
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
-        val pi = PendingIntent.getBroadcast(this, 0, intent, flags)
-        (getSystemService(Context.ALARM_SERVICE) as AlarmManager).cancel(pi)
-        updateCountdownLabel()
-        Toast.makeText(this, "已取消倒计时", Toast.LENGTH_SHORT).show()
-    }
-
-    private fun updateCountdownLabel() {
-        val end = prefs.countdownEnd
-        btnCountdown.text = if (end > System.currentTimeMillis()) {
-            "⏳ 剩 ${millisToHm(end - System.currentTimeMillis())}"
-        } else {
-            "⏳ 倒计时"
-        }
-    }
-
-    /** 通知被点开：把那次计时的起止时间填进录入面板并展开浮层。 */
-    private fun handleTimerIntent(intent: Intent) {
-        if (!intent.getBooleanExtra(TimerReceiver.EXTRA_FROM_TIMER, false)) return
-        val s = intent.getStringExtra(TimerReceiver.EXTRA_START)
-        val e = intent.getStringExtra(TimerReceiver.EXTRA_END)
-        if (s != null) etStart.setText(s)
-        if (e != null) etEnd.setText(e)
-        // 倒计时到点是真实发生的时间，日期按今天走，不跟着首页正在看的那天走
-        etDate.setText(LocalDate.now().toString())
-        prefs.countdownEnd = 0L
-        updateCountdownLabel()
-        openSheet()
-        Toast.makeText(this, "时间段已填好，补分类即可", Toast.LENGTH_SHORT).show()
-    }
-
-    // ---------- 通知权限 ----------
-
-    private fun requestNotifPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQ_NOTIF)
-            }
-        }
-    }
-
-    // ---------- 显示 ----------
-
-    /**
-     * 把相邻那天的数据填进底层预览页（左右滑动时从侧边露出来的那一页）。
-     * dir = 1 显示后一天，-1 显示前一天。只是静态预览，供滑动时看个大概，不参与录入。
-     */
-    private fun renderNeighbor(dir: Int = neighborDir) {
-        val date = viewDate.plusDays(dir.toLong())
-        val day = if (dir > 0) nextDayEntries else prevDayEntries
-        tvNeighborDate.text = "录入日期：$date"
-        neighborTimeline.setData(day, date)
-        val sorted = day.sortedWith(compareBy<LogEntry>({ it.startMin }, { it.endMin }))
-        tvNeighborRecords.text = if (sorted.isEmpty()) {
-            "$date 还没有时间记录。"
-        } else {
-            buildString {
-                sorted.forEach { e ->
-                    append(e.timeRange()).append("  ").append(e.title).append('\n')
-                }
-            }.trimEnd()
-        }
-    }
-
-    private fun renderStats() {
-        val day = entries.filter { it.date == viewDate }
-        val summary: DaySummary = Analyzer.analyzeDay(entries, viewDate)
-        val covered = Analyzer.coveredMinutes(day)
-        val unrecorded = (1440 - covered).coerceAtLeast(0)
-        tvStatsDate.text = "录入日期：$viewDate ▾"
-
-        // 四项统计排成一行
-        tvStatRecord.text = Formatters.duration(covered)
-        tvStatUnrecorded.text = Formatters.duration(unrecorded)
-        tvStatCoverage.text = Formatters.percent(covered * 100.0 / 1440.0)
-        tvStatCount.text = "${summary.entries} 条"
-
-        // 只保留一级分类，一格里按占比从多到少排开
-        val level1 = summary.byLevel1
-        tvLevel1.text = if (level1.isEmpty()) {
-            "一级分类：暂无"
-        } else {
-            "一级分类：" + level1.joinToString(" ") {
-                "${it.label} ${Formatters.duration(it.minutes)} ${Formatters.percent(it.percent)}"
-            }
-        }
-
-        // 只有文件级问题（如没选文件夹、文件名没日期）才留在这一块；
-        // 单行的时间问题已经变成下面记录列表里的红字行，这里不再重复列
-        if (warnings.isEmpty()) {
-            tvWarnings.visibility = View.GONE
-            tvWarnings.text = ""
-        } else {
-            tvWarnings.visibility = View.VISIBLE
-            tvWarnings.text = buildString {
-                append("提示（共 ${warnings.size} 条）\n")
-                warnings.forEach { append("· ").append(it).append("\n") }
-            }.trimEnd()
-        }
-
-        timeline.setData(day, viewDate)
-    }
-
-    // ---------- 当天全部记录 ----------
-
-    /**
-     * 逐条列出当天所有记录。两条时间不相连时，中间插一个"半行高"的空档，
-     * 高度固定是普通记录行的一半，视觉上一眼就能看出哪段时间漏记了。
-     *
-     * 解析不出来的行（时间写错等）红字排在最后，点一下就能改或删。
-     */
-    private fun renderRecords() {
-        recordsContainer.removeAllViews()
-        // 行高 = 字号 2 倍（跟随系统字体缩放），上下不再另留白
-        val rowHeight = rowHeightPx()
-
-        if (repo.root() == null) {
-            recordsContainer.addView(hintView("还没选择日记文件夹，请点右上角齿轮选择。"))
-            return
-        }
-        val day = entries.filter { it.date == viewDate }
-            .sortedWith(compareBy<LogEntry>({ it.startMin }, { it.endMin }))
-        if (day.isEmpty() && problems.isEmpty()) {
-            recordsContainer.addView(hintView("$viewDate 还没有时间记录。"))
-            return
-        }
-        day.forEachIndexed { idx, entry ->
-            if (idx > 0) {
-                val gap = entry.startMin - day[idx - 1].endMin
-                if (gap > 0) recordsContainer.addView(gapView(gap, rowHeight / 2))
-            }
-            recordsContainer.addView(recordRow(entry, rowHeight))
-        }
-
-        // 有问题的行：红字列出，点开可改可删
-        if (problems.isNotEmpty()) {
-            recordsContainer.addView(problemHeader(problems.size))
-            problems.forEach { recordsContainer.addView(problemRow(it, rowHeight)) }
-        }
-    }
-
-    /** 记录行高 = 字号的 2 倍。 */
-    private fun rowHeightPx(): Int = TypedValue.applyDimension(
-        TypedValue.COMPLEX_UNIT_SP,
-        ROW_TEXT_SP * 2f,
-        resources.displayMetrics
-    ).toInt()
-
-    private fun problemHeader(count: Int): TextView = TextView(this).apply {
-        text = "以下 $count 行时间有问题，点一下就能改"
-        textSize = 12f
-        setTextColor(Color.parseColor("#C5221F"))
-        setPadding(0, dp(6), 0, dp(2))
-    }
-
-    /** 一行问题记录：红底红字，点开回填浮层修正；解析失败的行没有 LogEntry，只认原文。 */
-    private fun problemRow(problem: ProblemLine, height: Int): View {
-        val row = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setBackgroundColor(Color.parseColor("#FDECEA"))
-            setPadding(dp(3), 0, dp(6), 0)
-            minimumHeight = height
-            isClickable = true
-            isFocusable = true
-            setOnClickListener { openProblemSheet(problem) }
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { setMargins(0, 0, 0, dp(1)) }
-        }
-
-        row.addView(View(this).apply {
-            setBackgroundColor(Color.parseColor("#D93025"))
-            layoutParams = LinearLayout.LayoutParams(dp(3), LinearLayout.LayoutParams.MATCH_PARENT)
-        })
-
-        row.addView(TextView(this).apply {
-            text = "第${problem.lineNo}行 ${problem.reason}：" +
-                problem.raw.trim().let { if (it.isEmpty()) "（空行）" else it }
-            textSize = ROW_TEXT_SP
-            maxLines = 1
-            ellipsize = TextUtils.TruncateAt.END
-            setTextColor(Color.parseColor("#C5221F"))
-            setPadding(dp(7), 0, 0, 0)
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-        })
-        return row
-    }
-
-    private fun hintView(message: String): TextView = TextView(this).apply {
-        text = message
-        textSize = 12f
-        setTextColor(Color.parseColor("#5F6368"))
-        setPadding(0, dp(8), 0, dp(8))
-    }
-
-    /** 半行高的空档：留白为主，中间一行淡灰小字说明空了多久。 */
-    private fun gapView(minutes: Int, height: Int): TextView = TextView(this).apply {
-        text = "· · ·  空 ${Formatters.duration(minutes)}  · · ·"
-        textSize = 9f
-        gravity = Gravity.CENTER
-        setTextColor(Color.parseColor("#9AA0A6"))
-        layoutParams = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, height
-        )
-    }
-
-    /**
-     * 一条记录压成一行：色条 + 时间 + 内容。
-     * 不再带删除按钮 —— 点这一行就会打开录入浮层并填好值，删除按钮在浮层里。
-     */
-    private fun recordRow(entry: LogEntry, height: Int): View {
-        val row = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setBackgroundColor(Color.parseColor("#F5F7FA"))
-            setPadding(dp(3), 0, dp(6), 0)
-            minimumHeight = height
-            isClickable = true
-            isFocusable = true
-            setOnClickListener { openEditSheet(entry) }
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { setMargins(0, 0, 0, dp(1)) }
-        }
-
-        row.addView(View(this).apply {
-            setBackgroundColor(TimelineView.colorFor(entry.level1))
-            layoutParams = LinearLayout.LayoutParams(dp(3), LinearLayout.LayoutParams.MATCH_PARENT)
-        })
-
-        row.addView(TextView(this).apply {
-            text = buildString {
-                append(entry.timeRange())
-                append(" ").append(Formatters.duration(entry.minutes))
-                if (entry.level1.isNotBlank()) append(" ").append(entry.level1)
-                if (entry.level2.isNotBlank()) append("/").append(entry.level2)
-                if (entry.title.isNotBlank()) append(" ").append(entry.title)
-                if (entry.links.isNotEmpty()) append(" ").append(entry.links.joinToString(" "))
-                if (entry.note.isNotBlank()) append(" ").append(entry.note)
-            }
-            textSize = ROW_TEXT_SP
-            maxLines = 1
-            ellipsize = TextUtils.TruncateAt.END
-            setTextColor(Color.parseColor("#202124"))
-            setPadding(dp(7), 0, 0, 0)
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-        })
-        return row
-    }
-
-    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
-
-    private fun confirmDelete(entry: LogEntry) {
-        val raw = LogParser.timeOfLine(entry.raw)
-        val crossed = raw != null && raw.second < raw.first
-        val crossMidnightHint = if (crossed) {
-            "\n（这一行是跨午夜记录，会连前一天那一段一起删）"
-        } else ""
-        AlertDialog.Builder(this)
-            .setTitle("删除这条记录？")
-            .setMessage(
-                "${entry.timeRange()}  ${entry.level1} ${entry.title}\n\n" +
-                    "只会从 md 文件里删掉这一行，其它内容不动。$crossMidnightHint"
-            )
-            .setPositiveButton("删除") { _, _ -> doDelete(entry) }
-            .setNegativeButton("取消", null)
-            .show()
-    }
-
-    private fun doDelete(entry: LogEntry) {
-        Thread {
-            val result = repo.deleteEntry(viewDate, entry)
-            mainHandler.post {
-                if (result.isSuccess) {
-                    Toast.makeText(this@MainActivity, "已从 md 删除这一行", Toast.LENGTH_SHORT).show()
-                    closeSheet()     // 如果是点记录进浮层后删的，顺手把浮层收起
-                    reload()
-                    suggestions = Suggestions.EMPTY
-                    loadSuggestionsIfNeeded()
-                } else {
-                    Toast.makeText(
-                        this@MainActivity,
-                        "删除失败：${result.exceptionOrNull()?.message}",
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
-            }
-        }.start()
-    }
-
-    /** 删掉一行"解析不出来"的原文（问题行）。 */
-    private fun confirmDeleteRawLine(date: LocalDate, rawLine: String) {
-        AlertDialog.Builder(this)
-            .setTitle("删掉这一行？")
-            .setMessage("$rawLine\n\n只会从 $date.md 里删掉这一行，其它内容不动。")
-            .setPositiveButton("删除") { _, _ ->
-                Thread {
-                    val result = repo.deleteLine(date, rawLine)
-                    mainHandler.post {
-                        if (result.isSuccess) {
-                            Toast.makeText(this@MainActivity, "已删除这一行", Toast.LENGTH_SHORT).show()
-                            closeSheet()
-                            reload()
-                        } else {
-                            Toast.makeText(
-                                this@MainActivity,
-                                "删除失败：${result.exceptionOrNull()?.message}",
-                                Toast.LENGTH_LONG
-                            ).show()
-                        }
-                    }
-                }.start()
-            }
-            .setNegativeButton("取消", null)
-            .show()
-    }
-
-    /** 首页内嵌的重叠显示；保存前校验时传入候选重叠做即时提示。没有重叠就整块隐藏。 */
-    private fun renderCheck(candidateOverlaps: List<Overlap>) {
-        val list = Analyzer.overlaps(entries)
-        if (list.isEmpty() && candidateOverlaps.isEmpty()) {
-            tvCheckTitle.visibility = View.GONE
-            tvCheck.visibility = View.GONE
-            tvCheck.text = ""
-            return
-        }
-        tvCheckTitle.visibility = View.VISIBLE
-        tvCheck.visibility = View.VISIBLE
-        val sb = StringBuilder()
-        candidateOverlaps.forEach {
-            sb.append("[待确认] ${Formatters.duration(it.minutes)}：")
-            sb.append("${it.first.timeRange()} ↔ ${it.second.timeRange()}\n")
-        }
-        list.forEach {
-            sb.append("${it.date} ${Formatters.duration(it.minutes)}：")
-            sb.append("${it.first.timeRange()} ↔ ${it.second.timeRange()}\n")
-        }
-        tvCheck.text = sb.toString()
-    }
-
-    // ---------- 时间工具 ----------
-
-    private fun nowHm(): String = hm(System.currentTimeMillis())
-
-    private fun hm(ms: Long): String {
-        val dt = LocalDateTime.ofInstant(Instant.ofEpochMilli(ms), ZoneId.systemDefault())
-        return "%02d:%02d".format(dt.hour, dt.minute)
-    }
-
-    private fun millisToHm(ms: Long): String {
-        val min = (ms / 60_000L).coerceAtLeast(0)
-        return "${min}分"
-    }
 }

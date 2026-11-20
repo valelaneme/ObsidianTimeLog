@@ -10,10 +10,20 @@
         android:orientation="vertical"
         android:padding="12dp">
 
-        <!-- 顶栏：日期居中（点它弹日期选择器），右上角只有一个齿轮图标 -->
+        <!-- 顶栏：左侧菜单，日期居中（点它弹日期选择器），右侧回到今天 -->
         <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content">
+
+            <ImageButton
+                android:id="@+id/btnSettings"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:layout_gravity="start|center_vertical"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="设置"
+                android:padding="10dp"
+                android:src="@drawable/ic_settings" />
 
             <TextView
                 android:id="@+id/tvStatsDate"
@@ -32,14 +42,14 @@
                 android:textStyle="bold" />
 
             <ImageButton
-                android:id="@+id/btnSettings"
+                android:id="@+id/btnBackToday"
                 android:layout_width="44dp"
                 android:layout_height="44dp"
                 android:layout_gravity="end|center_vertical"
                 android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="设置"
+                android:contentDescription="回到今天"
                 android:padding="10dp"
-                android:src="@drawable/ic_settings" />
+                android:src="@drawable/ic_today" />
         </FrameLayout>
 
         <!-- 内容区：两页并排，底层是相邻日期的预览页，滑动时从侧边露出来 -->
