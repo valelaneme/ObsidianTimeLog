@@ -20,7 +20,7 @@ import kotlin.math.min
  * - 灰底 = 没记录的空白时段
  * - 彩色 = 按一级分类上色的已记录时段（同一分类颜色固定）
  * - 顶部红色细条 = 重叠区间
- * - 黑色细竖线 = 3/6/9/…/21 点的刻度，最后画在色带之上，任何颜色都盖不住
+ * - 黑色细竖线 = 6/12/18 点的刻度，最后画在色带之上，任何颜色都盖不住
  * - 蓝色竖线 = 当天的当前时刻（翻到历史日期则不画）
  */
 class TimelineView @JvmOverloads constructor(
@@ -39,7 +39,7 @@ class TimelineView @JvmOverloads constructor(
     private val overlapPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.parseColor("#D93025")
     }
-    // 3/6/9…点的刻度线：黑色，最后画，压在颜色上面，不会被任何色块盖住
+    // 6/12/18 点的刻度线：黑色，最后画，压在颜色上面，不会被任何色块盖住
     private val tickPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.parseColor("#202124")
         style = Paint.Style.STROKE
@@ -101,9 +101,9 @@ class TimelineView @JvmOverloads constructor(
             canvas.drawLine(x, barTop, x, barBottom, nowPaint)
         }
 
-        // 刻度线 3/6/9/…/21：最后画，黑色细竖线，压在色块上面当尺子用。
-        // 0 点和 24 点正好在色带两端，不需要再画，免得糊住边缘。
-        for (hour in 3..21 step 3) {
+        // 刻度线只保留 6/12/18 点：最后画，黑色细竖线，压在色块上面当尺子用。
+        // 0 点和 24 点在色带两端不画；3/9/15/21 太密，按用户要求去掉，只留三个整段点。
+        for (hour in intArrayOf(6, 12, 18)) {
             val x = pad + barWidth * (hour / 24f)
             canvas.drawLine(x, barTop, x, barBottom, tickPaint)
         }

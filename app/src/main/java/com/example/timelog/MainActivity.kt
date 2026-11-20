@@ -212,6 +212,10 @@ class MainActivity : AppCompatActivity() {
                             swipeBlocked = true
                         } else {
                             swipeHorizontal = true
+                            // 判定横滑的第一刻就把当前页滚回顶部：预览页总是从顶部画，
+                            // 若当前页停在列表中间，两页记录会错开、滑到位后再归位就"跳一下"。
+                            // 提前归位，滑动全程两页都从同一高度开始。
+                            if (contentScroll.scrollY != 0) contentScroll.scrollTo(0, 0)
                         }
                     } else if (abs(dy) > 6f * density) {
                         swipeDecided = true   // 判定为纵向，交给 ScrollView 正常滚
