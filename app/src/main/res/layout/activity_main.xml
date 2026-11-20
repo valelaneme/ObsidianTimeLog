@@ -57,8 +57,9 @@
                 android:orientation="vertical"
                 android:background="?android:attr/windowBackground"
                 android:visibility="gone"
-                android:paddingTop="6dp">
+                android:paddingTop="0dp">
 
+                <!-- 预览页不再画日期标题：顶栏已经显示当前日期，再画一个会和它重复 -->
                 <TextView
                     android:id="@+id/tvNeighborDate"
                     android:layout_width="match_parent"
@@ -66,13 +67,14 @@
                     android:gravity="center"
                     android:paddingBottom="4dp"
                     android:textSize="15sp"
-                    android:textStyle="bold" />
+                    android:textStyle="bold"
+                    android:visibility="gone" />
 
                 <com.example.timelog.ui.TimelineView
                     android:id="@+id/neighborTimeline"
                     android:layout_width="match_parent"
                     android:layout_height="26dp"
-                    android:layout_marginTop="2dp" />
+                    android:layout_marginTop="6dp" />
 
                 <TextView
                     android:id="@+id/tvNeighborRecords"

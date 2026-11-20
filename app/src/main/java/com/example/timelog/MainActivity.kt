@@ -146,6 +146,8 @@ class MainActivity : AppCompatActivity() {
     private var swipeHorizontal = false
     // 自己算帧的滑动任务（不走系统动画，开发者选项关了动画也有效）
     private var slideTick: Runnable? = null
+    // 松手交接动画已滑完、正在切日期读数据：读好后只归位，不再做位移动画
+    private var swipeCommitPending = false
 
     /**
      * 左右滑动翻日期：手指按住直接拖，页面实时跟手移动；松手划够 40dp 就翻页。
@@ -162,6 +164,14 @@ class MainActivity : AppCompatActivity() {
         }
         when (ev.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
+                // 正滑到位、等新数据回来的空窗期：忽略这次按下，别把页面复位闪回旧内容
+                if (swipeCommitPending) {
+                    swipeDownX = ev.x
+                    swipeDownY = ev.y
+                    swipeDecided = true
+                    swipeHorizontal = false
+                    return super.dispatchTouchEvent(ev)
+                }
                 slideTick?.let { contentRoot.removeCallbacks(it) }
                 slideTick = null
                 // 上次动画若被打断，先把页面和预览复位，避免残留半截
@@ -210,8 +220,15 @@ class MainActivity : AppCompatActivity() {
                 if (swipeHorizontal) {
                     val dx = ev.x - swipeDownX
                     if (abs(dx) >= 40f * density) {
-                        val flipped = shiftDate(if (dx < 0f) 1 else -1)
-                        if (!flipped) slideContentTo(0f, 180L)   // 到今天被拦，弹回
+                        val dir = if (dx < 0f) 1 else -1
+                        // 先判断能不能翻：到今天就不能再往后了（提前拦，避免滑到一半又弹回来）
+                        if (dir > 0 && viewDate >= LocalDate.now()) {
+                            Toast.makeText(this, "今天就是最新的一天了", Toast.LENGTH_SHORT).show()
+                            slideContentTo(0f, 180L)
+                        } else {
+                            // 顺着手指方向把两页滑到位，滑完那一刻才切日期、换内容
+                            commitSwipe(dir)
+                        }
                     } else {
                         slideContentTo(0f, 180L)                 // 没划够，弹回
                     }
@@ -258,6 +275,55 @@ class MainActivity : AppCompatActivity() {
                         neighborInUse = false
                     }
                     slideTick = null
+                }
+            }
+        }
+        slideTick = tick
+        contentRoot.postOnAnimation(tick)
+    }
+
+    /**
+     * 松手后顺着手指方向把两页滑到位：当前页往手指方向滑出屏幕，相邻页滑进来占满屏幕。
+     * 关键是——滑的过程中两页各自连续移动，没有"瞬移"；等滑到位的那一刻才切日期、读数据，
+     * 再由 animateContentIn() 把内容页归位到 0。这样方向和手势一致，也不会有弹跳。
+     * dir = 1 左滑看后一天（旧页往左出、新页从右进）；-1 右滑看前一天（反之）。
+     */
+    private fun commitSwipe(dir: Int) {
+        slideTick?.let { contentRoot.removeCallbacks(it) }
+        val w = contentRoot.width.toFloat().coerceAtLeast(1f)
+        val fromX = contentRoot.translationX
+        val fromNX = neighborPage.translationX
+        // 当前页沿手指方向滑出一整屏：左滑(dir=1)往左出 -> -w；右滑(dir=-1)往右出 -> +w
+        val outX = -dir * w
+        // 相邻页从它现在的位置滑到 0（占满屏幕）
+        val start = System.currentTimeMillis()
+        val duration = 220L
+        val interpolator = android.view.animation.DecelerateInterpolator()
+        val tick = object : Runnable {
+            override fun run() {
+                val t = ((System.currentTimeMillis() - start).toFloat() / duration).coerceIn(0f, 1f)
+                val p = interpolator.getInterpolation(t)
+                contentRoot.translationX = fromX + (outX - fromX) * p
+                neighborPage.translationX = fromNX + (0f - fromNX) * p
+                if (t < 1f && contentRoot.isAttachedToWindow) {
+                    contentRoot.postOnAnimation(this)
+                } else {
+                    slideTick = null
+                    // 两页已滑到位：现在才切日期读数据。预览页先留着占住屏幕，
+                    // 等新数据渲染好再撤掉，避免中途露出白底。
+                    // 这里直接内联切日期，不走 shiftDate——那种会设入场动画标记，
+                    // 而两页纸已经滑到位，再播一次入场动画就是弹跳。
+                    val target = viewDate.plusDays(dir.toLong())
+                    if (dir > 0 && target >= LocalDate.now()) {
+                        // 动画期间恰好跨到今天：没得翻，弹回原位
+                        slideContentTo(0f, 160L)
+                    } else {
+                        swipeCommitPending = true
+                        pendingSlideDir = 0
+                        viewDate = target
+                        etDate.setText(target.toString())
+                        reload()
+                    }
                 }
             }
         }
@@ -634,25 +700,21 @@ class MainActivity : AppCompatActivity() {
                 renderStats()
                 renderRecords()
                 renderCheck(emptyList())
-                renderNeighbor(neighborDir)
-                animateContentIn()
+                // 若是滑动交接过来的：内容已换成新日期，把内容页归位、撤掉预览页即可，
+                // 不能再做位移动画——两页纸已经滑到位了，再动一次就是弹跳。
+                if (swipeCommitPending) {
+                    swipeCommitPending = false
+                    contentRoot.translationX = 0f
+                    contentRoot.alpha = 1f
+                    contentScroll.scrollTo(0, 0)
+                    neighborPage.visibility = View.GONE
+                    neighborInUse = false
+                } else {
+                    renderNeighbor(neighborDir)
+                    animateContentIn()
+                }
             }
         }.start()
-    }
-
-    /**
-     * 翻一天：-1 前一天，+1 后一天。
-     * 到今天为止——未来还没发生，没有可看可录的东西，所以不能往后翻。
-     */
-    private fun shiftDate(delta: Int): Boolean {
-        val today = LocalDate.now()
-        if (delta > 0 && viewDate >= today) {
-            Toast.makeText(this, "今天就是最新的一天了", Toast.LENGTH_SHORT).show()
-            return false
-        }
-        pendingSlideDir = if (delta > 0) 1 else -1
-        goToDate(viewDate.plusDays(delta.toLong()))
-        return true
     }
 
     /** 切日期的统一入口：改日期、同步录入框、重新读那天的 md。 */
@@ -716,14 +778,9 @@ class MainActivity : AppCompatActivity() {
         }
         contentScroll.scrollTo(0, 0)
 
-        if (neighborInUse) {
-            // 左右滑翻页：数据已换成新的一天，当前页从预览页当时的位置接着滑入，
-            // 预览页在 slideContentTo 里随之滑出并隐藏，两页无缝交接。
-            contentRoot.translationX = neighborPage.translationX
-        } else {
-            // 日历选日期：没有跟手过程，给一个整屏宽度的起点滑入
-            contentRoot.translationX = dir * contentRoot.width.toFloat()
-        }
+        // 日历选日期：没有跟手过程，给一个整屏宽度的起点滑入。
+        // （左右滑翻页不走这里——它在两页滑到位后由 reload 直接归位，不再播入场动画。）
+        contentRoot.translationX = dir * contentRoot.width.toFloat()
         slideContentTo(0f, 280L)
     }
 
