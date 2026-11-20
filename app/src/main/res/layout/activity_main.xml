@@ -42,12 +42,48 @@
                 android:src="@drawable/ic_settings" />
         </FrameLayout>
 
-        <!-- 内容区：翻日期时把旧页面拍成一张图叠在上面，和新的内容一起左右滑，像微信切标签 -->
+        <!-- 内容区：两页并排，底层是相邻日期的预览页，滑动时从侧边露出来 -->
         <FrameLayout
             android:id="@+id/contentFrame"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1">
+
+            <!-- 相邻日期预览页：左右滑动时从侧边露出，避免白边（平时隐藏） -->
+            <LinearLayout
+                android:id="@+id/neighborPage"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical"
+                android:background="?android:attr/windowBackground"
+                android:visibility="gone"
+                android:paddingTop="6dp">
+
+                <TextView
+                    android:id="@+id/tvNeighborDate"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center"
+                    android:paddingBottom="4dp"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+
+                <com.example.timelog.ui.TimelineView
+                    android:id="@+id/neighborTimeline"
+                    android:layout_width="match_parent"
+                    android:layout_height="26dp"
+                    android:layout_marginTop="2dp" />
+
+                <TextView
+                    android:id="@+id/tvNeighborRecords"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
+                    android:paddingTop="10dp"
+                    android:textSize="13sp"
+                    android:lineSpacingExtra="4dp" />
+            </LinearLayout>
 
             <ScrollView
                 android:id="@+id/contentScroll"
@@ -60,6 +96,7 @@
                 android:id="@+id/contentRoot"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:background="?android:attr/windowBackground"
                 android:orientation="vertical">
 
                 <!-- 24 小时时间轴：颜色=一级分类，红条=重叠，灰底=空白，蓝线=现在 -->

@@ -59,6 +59,13 @@ class MainActivity : AppCompatActivity() {
     private var viewDate: LocalDate = LocalDate.now()
     private var entries: List<LogEntry> = emptyList()
     private var warnings: List<String> = emptyList()
+    // 相邻两天的记录，滑动时填进底层预览页；date 为 null 表示那天还没加载
+    private var prevDayEntries: List<LogEntry> = emptyList()
+    private var nextDayEntries: List<LogEntry> = emptyList()
+    private var neighborLoaded = false
+    // 本次滑动是否正在用预览页；dir = 1 显示后一天，-1 显示前一天
+    private var neighborInUse = false
+    private var neighborDir = 1
     // 解析不出来的行（红字列在记录列表里，点开就能改）
     private var problems: List<ProblemLine> = emptyList()
     // 记住上次用的文件夹：从设置页换文件夹回来时自动刷新，不用手动点刷新
@@ -86,6 +93,11 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvStatsDate: TextView
     private lateinit var contentRoot: LinearLayout
     private lateinit var contentScroll: android.widget.ScrollView
+    // 相邻日期预览页（左右滑动时从侧边露出，避免白边）
+    private lateinit var neighborPage: View
+    private lateinit var tvNeighborDate: TextView
+    private lateinit var neighborTimeline: TimelineView
+    private lateinit var tvNeighborRecords: TextView
     private lateinit var tvStatRecord: TextView
     private lateinit var tvStatUnrecorded: TextView
     private lateinit var tvStatCoverage: TextView
@@ -152,6 +164,13 @@ class MainActivity : AppCompatActivity() {
             MotionEvent.ACTION_DOWN -> {
                 slideTick?.let { contentRoot.removeCallbacks(it) }
                 slideTick = null
+                // 上次动画若被打断，先把页面和预览复位，避免残留半截
+                if (neighborInUse) {
+                    neighborPage.visibility = View.GONE
+                    neighborInUse = false
+                }
+                contentRoot.translationX = 0f
+                contentRoot.alpha = 1f
                 swipeDownX = ev.x
                 swipeDownY = ev.y
                 swipeDecided = false
@@ -172,8 +191,19 @@ class MainActivity : AppCompatActivity() {
                     // 跟手：直接设位置（0.9 阻尼），纯手动位移，一定看得见
                     val x = dx * 0.9f
                     contentRoot.translationX = x
+                    contentRoot.alpha = 1f
                     val w = contentRoot.width.toFloat().coerceAtLeast(1f)
-                    contentRoot.alpha = 1f - 0.35f * (abs(x) / w).coerceIn(0f, 1f)
+                    if (neighborLoaded) {
+                        // 左滑看后一天(dir=1)、右滑看前一天(dir=-1)；预览页贴在露出的那一侧
+                        val dir = if (dx < 0f) 1 else -1
+                        if (!neighborInUse || dir != neighborDir) {
+                            neighborDir = dir
+                            renderNeighbor(dir)
+                            neighborPage.visibility = View.VISIBLE
+                            neighborInUse = true
+                        }
+                        neighborPage.translationX = x + dir * w
+                    }
                 }
             }
             MotionEvent.ACTION_UP -> {
@@ -199,28 +229,34 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * 自己算帧的"滑到位"动画：用 postOnAnimation 每帧插值设 translationX / alpha，
+     * 自己算帧的"滑到位"动画：用 postOnAnimation 每帧插值设 translationX，
      * 不走 View.animate() / ValueAnimator，所以开发者选项关了动画也照样滑。
+     * 两页纸：预览页若正在用，就跟当前页保持相对位置一起平移，露出的空隙始终被相邻那天填上。
      */
     private fun slideContentTo(targetX: Float, duration: Long) {
         slideTick?.let { contentRoot.removeCallbacks(it) }
         val fromX = contentRoot.translationX
-        val fromAlpha = contentRoot.alpha
+        val followNeighbor = neighborInUse
+        val fromNX = neighborPage.translationX
+        // 预览页终点 = 起点 + 当前页的位移量，两页始终同步平移
+        val targetNX = fromNX + (targetX - fromX)
         val start = System.currentTimeMillis()
         val interpolator = android.view.animation.DecelerateInterpolator()
-        val width = contentRoot.width.toFloat().coerceAtLeast(1f)
         val tick = object : Runnable {
             override fun run() {
                 val t = ((System.currentTimeMillis() - start).toFloat() / duration).coerceIn(0f, 1f)
                 val p = interpolator.getInterpolation(t)
                 contentRoot.translationX = fromX + (targetX - fromX) * p
-                val restAlpha = 1f - 0.35f * (abs(contentRoot.translationX) / width).coerceIn(0f, 1f)
-                contentRoot.alpha = fromAlpha + (restAlpha - fromAlpha) * p
+                if (followNeighbor) neighborPage.translationX = fromNX + (targetNX - fromNX) * p
                 if (t < 1f && contentRoot.isAttachedToWindow) {
                     contentRoot.postOnAnimation(this)
                 } else {
                     contentRoot.translationX = targetX
                     contentRoot.alpha = 1f
+                    if (followNeighbor) {
+                        neighborPage.visibility = View.GONE
+                        neighborInUse = false
+                    }
                     slideTick = null
                 }
             }
@@ -302,6 +338,10 @@ class MainActivity : AppCompatActivity() {
         tvStatsDate = findViewById(R.id.tvStatsDate)
         contentRoot = findViewById(R.id.contentRoot)
         contentScroll = findViewById(R.id.contentScroll)
+        neighborPage = findViewById(R.id.neighborPage)
+        tvNeighborDate = findViewById(R.id.tvNeighborDate)
+        neighborTimeline = findViewById(R.id.neighborTimeline)
+        tvNeighborRecords = findViewById(R.id.tvNeighborRecords)
         tvStatRecord = findViewById(R.id.tvStatRecord)
         tvStatUnrecorded = findViewById(R.id.tvStatUnrecorded)
         tvStatCoverage = findViewById(R.id.tvStatCoverage)
@@ -579,13 +619,22 @@ class MainActivity : AppCompatActivity() {
         lastReloadAt = now
         Thread {
             val result: ParseResult = repo.loadDay(viewDate)
+            // 顺带读相邻两天，供左右滑动时填充侧边预览页（避免白边）
+            val prevDate = viewDate.minusDays(1)
+            val nextDate = viewDate.plusDays(1)
+            val prevResult = repo.loadDay(prevDate)
+            val nextResult = repo.loadDay(nextDate)
             mainHandler.post {
                 entries = result.entries
                 warnings = result.warnings
                 problems = result.problems
+                prevDayEntries = prevResult.entries.filter { it.date == prevDate }
+                nextDayEntries = nextResult.entries.filter { it.date == nextDate }
+                neighborLoaded = true
                 renderStats()
                 renderRecords()
                 renderCheck(emptyList())
+                renderNeighbor()
                 animateContentIn()
             }
         }.start()
@@ -657,12 +706,22 @@ class MainActivity : AppCompatActivity() {
     private fun animateContentIn() {
         val dir = pendingSlideDir
         pendingSlideDir = 0
-        if (dir == 0 || contentRoot.width == 0) return
+        if (dir == 0 || contentRoot.width == 0) {
+            // 普通刷新（保存/回前台）不该有预览页残留，顺手清掉
+            if (neighborInUse) {
+                neighborPage.visibility = View.GONE
+                neighborInUse = false
+            }
+            return
+        }
         contentScroll.scrollTo(0, 0)
 
-        // 手指跟手拖动时已经把 contentRoot 挪到了一侧（translationX 非 0），
-        // 这时不重设起点，直接从当前位置滑回 0，衔接才顺；否则（日历选日期）给整屏起点。
-        if (abs(contentRoot.translationX) < 1f) {
+        if (neighborInUse) {
+            // 左右滑翻页：数据已换成新的一天，当前页从预览页当时的位置接着滑入，
+            // 预览页在 slideContentTo 里随之滑出并隐藏，两页无缝交接。
+            contentRoot.translationX = neighborPage.translationX
+        } else {
+            // 日历选日期：没有跟手过程，给一个整屏宽度的起点滑入
             contentRoot.translationX = dir * contentRoot.width.toFloat()
         }
         slideContentTo(0f, 280L)
@@ -1105,6 +1164,27 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ---------- 显示 ----------
+
+    /**
+     * 把相邻那天的数据填进底层预览页（左右滑动时从侧边露出来的那一页）。
+     * dir = 1 显示后一天，-1 显示前一天。只是静态预览，供滑动时看个大概，不参与录入。
+     */
+    private fun renderNeighbor(dir: Int) {
+        val date = viewDate.plusDays(dir.toLong())
+        val day = if (dir > 0) nextDayEntries else prevDayEntries
+        tvNeighborDate.text = "录入日期：$date"
+        neighborTimeline.setData(day, date)
+        val sorted = day.sortedWith(compareBy<LogEntry>({ it.startMin }, { it.endMin }))
+        tvNeighborRecords.text = if (sorted.isEmpty()) {
+            "$date 还没有时间记录。"
+        } else {
+            buildString {
+                sorted.forEach { e ->
+                    append(e.timeRange()).append("  ").append(e.title).append('\n')
+                }
+            }.trimEnd()
+        }
+    }
 
     private fun renderStats() {
         val day = entries.filter { it.date == viewDate }
