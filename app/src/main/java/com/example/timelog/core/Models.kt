@@ -132,4 +132,9 @@ object Formatters {
     }
 
     fun percent(value: Double): String = String.format("%.1f%%", value)
+
+    private val WEEK_NAMES = arrayOf("", "周一", "周二", "周三", "周四", "周五", "周六", "周日")
+
+    /** 顶栏日期显示：如「2026-11-20 周五」 */
+    fun dateWithWeek(d: LocalDate): String = "$d ${WEEK_NAMES[d.dayOfWeek.value]}"
 }

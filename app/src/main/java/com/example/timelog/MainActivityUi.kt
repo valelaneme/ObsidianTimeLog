@@ -670,7 +670,7 @@ fun MainActivity.renderStats() {
         val summary: DaySummary = Analyzer.analyzeDay(entries, viewDate)
         val covered = Analyzer.coveredMinutes(day)
         val unrecorded = (1440 - covered).coerceAtLeast(0)
-        tvStatsDate.text = "录入日期：$viewDate ▾"
+        tvStatsDate.text = "${Formatters.dateWithWeek(viewDate)} ▾"
 
         // 四项统计排成一行
         tvStatRecord.text = Formatters.duration(covered)

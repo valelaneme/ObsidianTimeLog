@@ -330,7 +330,7 @@ class MainActivity : AppCompatActivity() {
         val target = viewDate.plusDays(dir.toLong())
         viewDate = target
         etDate.setText(target.toString())
-        tvStatsDate.text = "录入日期：$target ▾"
+        tvStatsDate.text = "${Formatters.dateWithWeek(target)} ▾"
         // 相邻页从它现在的位置滑到 0（占满屏幕）
         val start = System.currentTimeMillis()
         val duration = 220L
@@ -351,7 +351,7 @@ class MainActivity : AppCompatActivity() {
                     if (dir > 0 && target.isAfter(LocalDate.now())) {
                         viewDate = oldDate
                         etDate.setText(oldDate.toString())
-                        tvStatsDate.text = "录入日期：$oldDate ▾"
+                        tvStatsDate.text = "${Formatters.dateWithWeek(oldDate)} ▾"
                         slideContentTo(0f, 160L)
                     } else {
                         applyCachedDay(target, dir, oldDate)
@@ -729,7 +729,6 @@ class MainActivity : AppCompatActivity() {
             date = viewDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
         }
         val dialog = AlertDialog.Builder(this)
-            .setTitle("选择日期（最晚到今天）")
             .setView(calendar)
             .create()
         var picked = false
@@ -747,6 +746,12 @@ class MainActivity : AppCompatActivity() {
         }
         dialog.setCanceledOnTouchOutside(true)
         dialog.show()
+        // 弹窗整体上移，缩短手指从屏幕下方抬到日历的距离
+        dialog.window?.let { w ->
+            val lp = w.attributes
+            lp.y = -(90 * resources.displayMetrics.density).toInt()
+            w.attributes = lp
+        }
     }
 
     /**
