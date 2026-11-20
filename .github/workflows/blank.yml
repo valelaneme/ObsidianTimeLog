@@ -121,12 +121,20 @@ jobs:
           VER: ${{ steps.apk.outputs.ver }}
         run: |
           TAG="v${VER}"
+          NOTES_FILE="RELEASE_NOTES.md"
+          # 说明正文取仓库里的 RELEASE_NOTES.md；每次发版前更新那个文件即可
+          if [ ! -f "$NOTES_FILE" ]; then
+            echo "# TimeLog ${VER}" > "$NOTES_FILE"
+            echo "（本次未填写更新说明）" >> "$NOTES_FILE"
+          fi
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "$APK" --clobber
+            # 同版本重复编译时，也把最新的更新说明同步到下载页
+            gh release edit "$TAG" --notes-file "$NOTES_FILE"
           else
             gh release create "$TAG" "$APK" \
               --title "TimeLog ${VER}" \
-              --notes "自动构建 ${VER}（提交 ${GITHUB_SHA:0:7}，第 ${GITHUB_RUN_NUMBER} 次运行）"
+              --notes-file "$NOTES_FILE"
           fi
           echo "直链：https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/$(basename "$APK")"
 

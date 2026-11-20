@@ -21,6 +21,7 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.example.timelog.core.Analyzer
@@ -425,6 +426,7 @@ class MainActivity : AppCompatActivity() {
         lastTreeUri = repo.treeUri?.toString()
         bindViews()
         setupListeners()
+        setupBackPress()
 
         etDate.setText(LocalDate.now().toString())
         etL1.setText(prefs.level1)
@@ -472,6 +474,24 @@ class MainActivity : AppCompatActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleTimerIntent(intent)
+    }
+
+    /**
+     * 系统返回键：录入浮层打开时，按返回只收起浮层、回到当天记录页，不再退出 App。
+     * 浮层没开时才走默认行为（退出）。日期选择是 AlertDialog，会自己消费返回键，不受影响。
+     */
+    private fun setupBackPress() {
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (inputSheet.visibility == View.VISIBLE) {
+                    closeSheet()
+                } else {
+                    isEnabled = false
+                    onBackPressedDispatcher.onBackPressed()
+                    isEnabled = true
+                }
+            }
+        })
     }
 
     override fun onDestroy() {

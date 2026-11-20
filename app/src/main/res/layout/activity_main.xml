@@ -207,7 +207,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:paddingTop="12dp"
-                    android:text="当天全部记录"
+                    android:text="当天全部记录（点击一条可修改）"
                     android:textSize="14sp"
                     android:textStyle="bold" />
 
@@ -382,7 +382,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:paddingTop="12dp"
-                    android:text="当天全部记录（点一条可修改）"
+                    android:text="当天全部记录（点击一条可修改）"
                     android:textSize="14sp"
                     android:textStyle="bold" />
 

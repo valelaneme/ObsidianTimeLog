@@ -4,11 +4,11 @@ plugins {
 }
 
 // 版本号分两个，各管各的：
-//   versionName = 人看的版本号（1.7.1），发版时**只改下面这一行**。
-//                 它决定 APK 文件名 Timelog-1.7.1.apk、Release 标签 v1.7.1、手机「应用信息」里显示的数字。
+//   versionName = 人看的版本号（1.7.2），发版时**只改下面这一行**。
+//                 它决定 APK 文件名 Timelog-1.7.2.apk、Release 标签 v1.7.2、手机「应用信息」里显示的数字。
 //   versionCode = 系统看的序号，由编译时刻的分钟数自动生成（约 2900 万，远低于 Android 上限 21 亿）。
 //                 手机上不显示，但**每次编译都会变大**，所以覆盖安装不会被系统当成同一版本。
-def appVersionName = '1.7.1'
+def appVersionName = '1.7.2'
 
 def buildStamp = System.currentTimeMillis()
 def ciBuildNumber = (buildStamp / 60000L) as int       // 分钟级序号，只给 versionCode 用
@@ -81,5 +81,6 @@ android {
 dependencies {
     implementation 'androidx.core:core-ktx:1.12.0'
     implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'androidx.activity:activity-ktx:1.6.1'
     implementation 'androidx.documentfile:documentfile:1.0.1'
 }
