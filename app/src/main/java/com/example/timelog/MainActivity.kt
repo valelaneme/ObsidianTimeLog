@@ -453,6 +453,9 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        // 长时间切到后台再回来：可能停在半截滑动 / 预览页残留状态（进程没被杀、View 还在），
+        // 先把两页纸和位移复位，否则会露出空白页，看着像「左右页面没信息」。
+        resetSwipeVisuals()
         // 没有任何「刷新」按钮了，全部自动：
         // 1) 打开 App → onCreate 里读一次；
         // 2) 从设置页换了文件夹 → 这里发现 treeUri 变了，重读并重建常用候选；
@@ -496,6 +499,26 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         })
+    }
+
+    /**
+     * 把跟手翻页留下的中间状态一次清干净。
+     * 从后台回来、或系统中途打断手势时调用，避免页面卡在半滑状态露出空白预览页。
+     */
+    internal fun resetSwipeVisuals() {
+        slideTick?.let { contentRoot.removeCallbacks(it) }
+        slideTick = null
+        swipeCommitPending = false
+        swipeDecided = false
+        swipeHorizontal = false
+        swipeBlocked = false
+        neighborInUse = false
+        neighborDir = 1
+        pendingSlideDir = 0
+        contentRoot.translationX = 0f
+        contentRoot.alpha = 1f
+        neighborPage.translationX = 0f
+        neighborPage.visibility = View.GONE
     }
 
     override fun onDestroy() {
@@ -641,14 +664,19 @@ class MainActivity : AppCompatActivity() {
         val now = System.currentTimeMillis()
         if (!force && now - lastReloadAt < 600) return
         lastReloadAt = now
+        // 捕获发起读取那一刻的日期和文件夹：读文件期间用户可能翻页或换文件夹，
+        // 回来时丢弃过期结果，否则旧数据会盖掉新页面（长时间后台回来尤其容易撞上）。
+        val requestedDate = viewDate
+        val requestedTree = repo.treeUri?.toString()
         Thread {
-            val result: ParseResult = repo.loadDay(viewDate)
+            val result: ParseResult = repo.loadDay(requestedDate)
             // 顺带读相邻两天：既填侧边预览页，也进完整缓存，供滑动到位后直接切换
-            val prevDate = viewDate.minusDays(1)
-            val nextDate = viewDate.plusDays(1)
+            val prevDate = requestedDate.minusDays(1)
+            val nextDate = requestedDate.plusDays(1)
             val prevResult = repo.loadDay(prevDate)
             val nextResult = repo.loadDay(nextDate)
             mainHandler.post {
+                if (viewDate != requestedDate || repo.treeUri?.toString() != requestedTree) return@post
                 // 三天完整结果一次入缓存；只留这三天，避免长期翻页越攒越多
                 dayCache.clear()
                 dayCache[viewDate] = result
@@ -732,11 +760,18 @@ class MainActivity : AppCompatActivity() {
         val dir = pendingSlideDir
         pendingSlideDir = 0
         if (dir == 0 || contentRoot.width == 0) {
-            // 普通刷新（保存/回前台）不该有预览页残留，顺手清掉
+            // 普通刷新（保存/回前台）不该有预览页残留，顺手清掉。
+            // 关键：横滑被打断时 translationX 可能停在半路，这里必须归零，否则页面错位露白。
+            slideTick?.let { contentRoot.removeCallbacks(it) }
+            slideTick = null
+            swipeCommitPending = false
             if (neighborInUse) {
                 neighborPage.visibility = View.GONE
                 neighborInUse = false
             }
+            neighborPage.translationX = 0f
+            contentRoot.translationX = 0f
+            contentRoot.alpha = 1f
             return
         }
         contentScroll.scrollTo(0, 0)

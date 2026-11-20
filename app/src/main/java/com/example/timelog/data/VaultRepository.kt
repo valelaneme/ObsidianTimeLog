@@ -21,9 +21,27 @@ class VaultRepository(private val context: Context) {
             prefs.edit().putString("tree_uri", value?.toString()).apply()
         }
 
+    // 按选中的文件夹缓存真实日记目录；treeUri 变了 key 就变了，自动失效
+    private var cachedRootKey: String? = null
+    private var cachedRoot: DocumentFile? = null
+
+    /**
+     * 真正放 md 的目录。默认钻进所选文件夹下的 Note/TimeLog 子目录：
+     * 在设置页选一次 Obsidian 库根目录即可，App 自动进这个子文件夹读写。
+     * 若选中的文件夹里没有这个结构（比如本来就选了 TimeLog 本身），退回选中的文件夹，
+     * 兼容原来的用法。
+     */
     fun root(): DocumentFile? {
         val uri = treeUri ?: return null
-        return DocumentFile.fromTreeUri(context, uri)
+        val key = uri.toString()
+        if (key == cachedRootKey && cachedRoot != null) return cachedRoot
+        val base = DocumentFile.fromTreeUri(context, uri) ?: return null
+        val note = base.findFile("Note")
+        val timeLog = note?.takeIf { it.isDirectory }?.findFile("TimeLog")?.takeIf { it.isDirectory }
+        val resolved = timeLog ?: base
+        cachedRootKey = key
+        cachedRoot = resolved
+        return resolved
     }
 
     /**
