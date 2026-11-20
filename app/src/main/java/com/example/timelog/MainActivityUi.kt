@@ -364,7 +364,7 @@ fun MainActivity.onSaveClick() {
             }
             mainHandler.post {
                 if (mine.isNotEmpty()) {
-                    AlertDialog.Builder(this@MainActivity)
+                    AlertDialog.Builder(this)
                         .setTitle("时间重叠，建议修改")
                         .setMessage(describeOverlaps(mine))
                         .setPositiveButton("返回修改时间", null)
@@ -832,14 +832,14 @@ fun MainActivity.doDelete(entry: LogEntry) {
             val result = repo.deleteEntry(viewDate, entry)
             mainHandler.post {
                 if (result.isSuccess) {
-                    Toast.makeText(this@MainActivity, "已从 md 删除这一行", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "已从 md 删除这一行", Toast.LENGTH_SHORT).show()
                     closeSheet()     // 如果是点记录进浮层后删的，顺手把浮层收起
                     reload()
                     suggestions = Suggestions.EMPTY
                     loadSuggestionsIfNeeded()
                 } else {
                     Toast.makeText(
-                        this@MainActivity,
+                        this,
                         "删除失败：${result.exceptionOrNull()?.message}",
                         Toast.LENGTH_LONG
                     ).show()
@@ -858,12 +858,12 @@ fun MainActivity.confirmDeleteRawLine(date: LocalDate, rawLine: String) {
                     val result = repo.deleteLine(date, rawLine)
                     mainHandler.post {
                         if (result.isSuccess) {
-                            Toast.makeText(this@MainActivity, "已删除这一行", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(this, "已删除这一行", Toast.LENGTH_SHORT).show()
                             closeSheet()
                             reload()
                         } else {
                             Toast.makeText(
-                                this@MainActivity,
+                                this,
                                 "删除失败：${result.exceptionOrNull()?.message}",
                                 Toast.LENGTH_LONG
                             ).show()
