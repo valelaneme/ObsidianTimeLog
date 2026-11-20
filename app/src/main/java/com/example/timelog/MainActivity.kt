@@ -762,27 +762,32 @@ class MainActivity : AppCompatActivity() {
             onPicked(chosen)
         }
         dialog.setCanceledOnTouchOutside(true)
-        dialog.show()
-        // 上边贴到被点控件的下边；下方放不下（如录入面板在屏幕下半部）就自动上移，保证整张日历可见。
-        // 先隐藏、量好高度、摆好位置再显示，避免先居中再跳过去的闪烁。
-        dialog.window?.let { w ->
+        // 先按目标位置摆好窗口再用 setOnShowListener 显示，避免先居中再跳过去的闪烁。
+        dialog.setOnShowListener {
+            val w = dialog.window ?: return@setOnShowListener
             val deco = w.decorView
-            deco.visibility = View.INVISIBLE
+            // 先透明，量好高度、摆好位置后再显示
+            deco.alpha = 0f
             deco.post {
                 if (!dialog.isShowing) return@post
                 val loc = IntArray(2)
                 anchor.getLocationOnScreen(loc)
                 val anchorBottom = loc[1] + anchor.height
                 val gap = (8 * resources.displayMetrics.density).toInt()
-                val maxTop = resources.displayMetrics.heightPixels - deco.height - gap
+                // deco.height 此时已量出；若仍为 0（个别机型 post 过早），退回到 anchor 下 8dp
+                val measured = if (deco.height > 0) deco.height else (320 * resources.displayMetrics.density).toInt()
+                val maxTop = resources.displayMetrics.heightPixels - measured - gap
                 val top = kotlin.math.min(anchorBottom, maxTop).coerceAtLeast(gap)
                 val lp = w.attributes
-                lp.gravity = android.view.Gravity.TOP
+                // 关键：必须带 CENTER_HORIZONTAL，否则只有 TOP 会让弹窗贴到屏幕最左边（顶栏和录入面板都跑偏）。
+                lp.gravity = android.view.Gravity.TOP or android.view.Gravity.CENTER_HORIZONTAL
+                lp.x = 0
                 lp.y = top
                 w.attributes = lp
-                deco.visibility = View.VISIBLE
+                deco.alpha = 1f
             }
         }
+        dialog.show()
     }
 
     /** 点顶栏日期：选哪天就看哪天。 */

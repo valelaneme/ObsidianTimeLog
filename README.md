@@ -99,18 +99,18 @@ TimerReceiver.kt  倒计时到点的系统闹钟接收器，弹通知
    - ⚠️ `.github` 是隐藏文件夹，Windows 拖拽容易漏传。漏了它 Actions 就不会自动跑；此时可点 **Actions** 页手动 **Run workflow** 也能编译（前提该 workflow 已在仓库里）。
 2. 点 **Actions** → 左侧 **Build APK** → **Run workflow** → 点绿色按钮。
 3. 跑完有两种拿包方式：
-   - **推荐：Releases 直下 .apk**（不用解压）→ 回仓库首页，右侧 **Releases**（或直接打开 `/releases/latest`）→ 点开最新一条 → 在 **Assets** 里点 `Timelog-1.7.6.apk` 即直接下载 APK 文件。**文件名就是版本号**，下载下来就是 `.apk`。
-   - 或用 **Artifacts**：点进这次运行 → 最下方 **Artifacts** → 下载 **Timelog-1.7.6-zip**。注意 GitHub 的 Artifacts **一定是 zip**（平台机制，无法改成直接给 apk），解压后得到 `Timelog-1.7.6.apk`。
+   - **推荐：Releases 直下 .apk**（不用解压）→ 回仓库首页，右侧 **Releases**（或直接打开 `/releases/latest`）→ 点开最新一条 → 在 **Assets** 里点 `Timelog-1.7.7.apk` 即直接下载 APK 文件。**文件名就是版本号**，下载下来就是 `.apk`。
+   - 或用 **Artifacts**：点进这次运行 → 最下方 **Artifacts** → 下载 **Timelog-1.7.7-zip**。注意 GitHub 的 Artifacts **一定是 zip**（平台机制，无法改成直接给 apk），解压后得到 `Timelog-1.7.7.apk`。
 4. APK 传到手机安装（允许"安装未知来源应用"）。首次打开选一次日记文件夹授权 + 通知权限。
 
 **版本号**：现在分成两个，各管各的：
 
 | 字段 | 谁会看到 | 怎么来 |
 |---|---|---|
-| `versionName` | APK 文件名、Release 标签、手机「应用信息」里显示的版本 | **手写**，在 `app/build.gradle` 顶部的 `def appVersionName = '1.7.6'` 改这一行；发新版就改成 `1.7.6` |
+| `versionName` | APK 文件名、Release 标签、手机「应用信息」里显示的版本 | **手写**，在 `app/build.gradle` 顶部的 `def appVersionName = '1.7.7'` 改这一行；发新版就改成 `1.7.7` |
 | `versionCode` | 只有安卓系统内部用，手机上不显示 | 编译时刻的分钟级时间戳，**每次编译必然变大**，所以覆盖安装不会被系统当成同一版本而"装了没反应" |
 
-Gradle 会把本次 `versionName` 写到 `app/build/timelog-versionName.txt`，workflow 据此把 APK 改名为 `Timelog-1.7.6.apk`、发 Release `v1.7.6`（标题 `TimeLog 1.7.6`），所以**文件名、Release 标签、手机里显示的版本号三者永远一致**。最低 Android 8.0（API 26）。
+Gradle 会把本次 `versionName` 写到 `app/build/timelog-versionName.txt`，workflow 据此把 APK 改名为 `Timelog-1.7.7.apk`、发 Release `v1.7.7`（标题 `TimeLog 1.7.7`），所以**文件名、Release 标签、手机里显示的版本号三者永远一致**。最低 Android 8.0（API 26）。
 
 ## 正式签名（已接好）
 
@@ -132,7 +132,7 @@ GitHub 仓库 → Settings → Secrets and variables → Actions 里已存这 4 
 >
 > 卸载前不用备份数据——你的日志是 Obsidian 里的 md 文件，不在 App 里；重装后重新选一次日记文件夹授权即可。
 
-产物命名：APK 编译后改名为 `Timelog-<版本号>.apk`（当前 `Timelog-1.7.6.apk`），同时上传 Artifact（GitHub 会包成 zip，名字 `Timelog-1.7.6-zip`）和发布 Release（`v1.7.6`，Assets 里是原始 .apk 直链，不用解压）。**同一个版本号重复编译时，会覆盖 Release 里同名的那一个文件**，链接不变。构建类型仍是 debug；以后要出正式发布版，把 workflow 里 `assembleDebug` 改成 `assembleRelease`、上传路径改成 `.../apk/release/app-release.apk` 即可，签名配置不用再动。
+产物命名：APK 编译后改名为 `Timelog-<版本号>.apk`（当前 `Timelog-1.7.7.apk`），同时上传 Artifact（GitHub 会包成 zip，名字 `Timelog-1.7.7-zip`）和发布 Release（`v1.7.7`，Assets 里是原始 .apk 直链，不用解压）。**同一个版本号重复编译时，会覆盖 Release 里同名的那一个文件**，链接不变。构建类型仍是 debug；以后要出正式发布版，把 workflow 里 `assembleDebug` 改成 `assembleRelease`、上传路径改成 `.../apk/release/app-release.apk` 即可，签名配置不用再动。
 
 ## 已知限制与风险
 

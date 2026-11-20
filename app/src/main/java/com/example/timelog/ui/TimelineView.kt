@@ -63,7 +63,7 @@ class TimelineView @JvmOverloads constructor(
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         val density = resources.displayMetrics.density
-        val pad = 8f * density
+        val pad = 0f   // 色带画满整条视图，左右与下方文字对齐（原来左右各缩进 8dp）
         // 视图里只剩色带本身（原来下方的刻度数字已删掉），上下各留 3dp
         val barTop = 3f * density
         val barBottom = height - 3f * density
